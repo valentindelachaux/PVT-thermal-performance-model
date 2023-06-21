@@ -3,16 +3,11 @@ import copy
 import pandas as pd
 import numpy as np
 import heat_transfer as bht
+import ht
 
 from CoolProp.CoolProp import PropsSI
 
 # %run C:\Users\BU05\Documents\Modele1D_Type560\Type560.py
-
-# par
-
-# "sigma", "eta_nom","Eff_T","T_ref","Eff_G","G_ref","X_rad","X_corr","W","D_tube","N_harp",
-# "L_tube","tau_alpha","eps","k_abs","lambd_abs","h_fluid","R_top","R_inter","R_b","C_B","G",
-# "Gp","T_sky","T_amb","T_back","T_fluid_in0","Cp","mdot","theta"
 
 # Function for Excel
 # Search a cell by its nom_variable and return a string like "B3"
@@ -22,7 +17,6 @@ def find_cell_by_name(wb,nom_variable):
     ch2 = ch.split("!")[1]
     ch3 = ch2.replace("$","")
     return ch3
-    
 
 
 ## Relationship between wind and R_top
@@ -44,9 +38,23 @@ def tanh_or_inverse(arg):
     return math.tanh(arg)
 
 def h_fluid(par,par_p,var,hyp):
-    D_tube = par["D_tube"]
+    """Calculates the convective heat transfer coefficient between the fluid and the tube wall and stores it in var["h_fluid"]
+    
+    Args:
+        par (dict): dictionary containing the parameters of the PVT panel
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        hyp (dict): dictionary containing the hypotheses
+    
+    Returns:
+        None
+        
+    """
 
-    if par["is_manifold"] == 1 and par["geometry"] == "harp":
+    D_tube = par["D_tube"]
+    L_tube = par["L_tube"]
+
+    if par["is_inlet_man"] == 1 or par["is_outlet_man"] == 1 and par["geometry"] == "harp":
         mdot = par_p["mdot"]/2
     else:
         mdot = par_p["mdot"]
@@ -62,6 +70,7 @@ def h_fluid(par,par_p,var,hyp):
     k_fluid = PropsSI('L', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
     rho_fluid = PropsSI('D', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
     mu_fluid = PropsSI('V', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
+    Pr = PropsSI('Prandtl', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
 
     flow_rate_per_riser = (mdot/N_harp)/rho_fluid # en m3/s
     tube_section = math.pi*(D_tube/2)**2
@@ -70,22 +79,41 @@ def h_fluid(par,par_p,var,hyp):
 
     Re = (rho_fluid*fluid_speed*D_tube)/mu_fluid
 
-    Pr_fluid = 7.
+    
 
-    if Re<2000:
-        Nu_fluid = 0.7*0.023*(Re**0.8)*(Pr_fluid**0.4)
+    if Re < 2000:
+        if par["tube_geometry"] == "rectangular":
+            Nu = ht.conv_internal.Nu_laminar_rectangular_Shan_London(min(par["H_tube"],par["w_tube"])/max(par["H_tube"],par["w_tube"]))
+        else:
+            Nu = ht.conv_internal.Nu_conv_internal(Re,Pr,Method='Laminar - constant Q')
     else:
-        Nu_fluid = 0.023*(Re**0.8)*(Pr_fluid**0.4)
+        Nu = ht.conv_internal.turbulent_Colburn(Re,Pr)
 
-    var["h_fluid"]  = (k_fluid/D_tube)*Nu_fluid
+    var["Re"] = Re
+    var["Nu"] = Nu
+    var["h_fluid"]  = (k_fluid/D_tube)*Nu
 
 def h_top(par,par_p,var,hyp):
+    """Calculates the convective heat transfer coefficient between the top of the panel and the ambient air and stores it in var["h_top_g"]
+    
+    $$
+    h_{top} = \left( h_{free}^3 + h_{forced}^3 \right)^{1/3}
+    $$
 
-    if par["is_manifold"] == 1:
-        var['h_top'] = hyp['h_top_man'] 
+    Args:
+        par (dict): dictionary containing the parameters of the PVT panel
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        hyp (dict): dictionary containing the hypotheses
+    
+    Returns:
+        None"""
+
+    if par["is_inlet_man"] == 1 or par["is_outlet_man"] == 1:
+        var['h_top_g'] = hyp['h_top_man'] 
 
     else:
-        T_PV = var["T_PV"]
+        T_glass = var["T_glass"]
         T_amb = par_p["T_amb"]
 
         if par["orientation"]=="portrait":
@@ -93,24 +121,33 @@ def h_top(par,par_p,var,hyp):
         else:
             L_c = par["w_pan"]
 
-        h_free = hyp["coeff_h_top_free"]*bht.top_h_simple(T_PV,T_amb,hyp["theta"],L_c)
+        h_free = hyp["coeff_h_top_free"]*bht.top_h_simple(T_glass,T_amb,hyp["theta"],L_c)
 
+        if hyp["h_top_turbulent"] == 1:
+            h_forced = hyp["coeff_h_top_forced"]*bht.h_top_forced_turbulent(T_glass,T_amb,par_p["u"],L_c)
+        else:
+            h_forced = hyp["coeff_h_top_forced"]*bht.h_top_forced(T_glass,T_amb,par_p["u"],L_c)
 
-
-        h_forced = hyp["coeff_h_top_forced"]*bht.h_top_forced(T_PV,T_amb,par_p["u"],L_c)
-
-        var["h_top"] = (h_free**3 + h_forced**3)**(1/3)
-
+        var["h_top_g"] = (h_free**3 + h_forced**3)**(1/3)
 
 def h_back(par,par_p,var,hyp):
-
+    """Calculates the convective heat transfer coefficient between the back of the panel and the ambient air and stores it var["h_back"]
+    
+    Args:
+        par (dict): dictionary containing the parameters of the PVT panel
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        hyp (dict): dictionary containing the hypotheses
+        
+    Returns:
+        None"""
 
     # Anomaly
     if  par["is_anomaly"] == 1:
         var["h_back"] = hyp['h_back_prev']
 
     # Manifold
-    elif par["is_manifold"] == 1 :
+    elif par["is_inlet_man"] == 1 or par["is_outlet_man"] == 1 :
         if hyp['calc_h_back_manifold'] == 1:
             L_c = par['H_tube']
 
@@ -202,6 +239,15 @@ def h_back(par,par_p,var,hyp):
                 var["h_back"] = h1
                 # print("var['h_back']",var["h_back"])
 
+def h_top_mean(par,par_p,var,hyp):
+    
+    old_h_top = var["h_top_g"]
+    h_top(par,par_p,var,hyp)
+
+    new_h_top = var["h_top_g"]
+
+    var["h_top_g"] = (old_h_top+new_h_top)/2
+
 def h_back_mean(par,par_p,var,hyp):
 
     old_h_back = var["h_back"]
@@ -209,13 +255,21 @@ def h_back_mean(par,par_p,var,hyp):
 
     new_h_back = var["h_back"]
 
-    if abs(new_h_back - old_h_back) > 0.2:
-        var["h_back"] = (old_h_back+new_h_back)/2
-    else:
-        pass
+    var["h_back"] = (old_h_back+new_h_back)/2
+
 
 
 def h_back_tube(par,par_p,var,hyp):
+    """Calculates the back heat transfer coefficient for the tube and stores it in var["h_back_tube"]
+    
+    Args:
+        par (dict): dictionary containing the PVT parameters
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        hyp (dict): dictionary containing the hypotheses
+        
+    Returns:
+        None"""
 
     # Cas où le tuyau est bien lié à l'absorbeur (conductif)
     if par["l_c"] > 0. :
@@ -245,10 +299,35 @@ def h_back_tube(par,par_p,var,hyp):
         #     res = bht.back_h_mixed(T_ref,par_p["T_back"],par_p["u_back"],hyp["theta"],L_c)
         # else:
         res = bht.back_h_cylinder(T_ref,par_p["T_back"],L_c)
+
+        if par["is_inlet_man"] == 1 and hyp["inlet_manifold_in_wind"] == 1:
+            T_film = (var["T_tube_mean"]+par_p["T_amb"])/2
+            D = par["D_tube"]+par["lambd_riser_back"]
+            nu = bht.air_nu(T_film)
+            Re = (par_p["u"]*D)/nu
+            Pr = bht.air_Pr()
+            k = bht.air_k(T_film)
+            Nu_forced = ht.conv_external.Nu_external_cylinder(Re,Pr)
+            h_forced = Nu_forced*(k/D)
+        else:
+            h_forced = 0.
                 
-        var["h_back_tube"] = res
+        var["h_back_tube"] = (res**3 + h_forced**3)**(1/3)
 
 def h_back_fins(par,par_p,var,hyp):
+    """Calculates the back heat transfer coefficient for the fins and stores it in var["h_back_fins"]
+    
+    Args:
+        par (dict): dictionary containing the PVT parameters
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        hyp (dict): dictionary containing the hypotheses
+        
+    Returns:
+        None"""
+
+
+
     if hyp["h_back_fins_calc"] == "tube":
         var["h_back_fins"] = var["h_back_tube"]
     elif hyp["h_back_fins_calc"] == "abs":
@@ -256,7 +335,10 @@ def h_back_fins(par,par_p,var,hyp):
     elif hyp["h_back_fins_calc"] == "TS":
         L_c = par["L_fin"]
         D = par["D"]
-        var["h_back_fins"] = hyp["coeff_h_back"]*bht.back_h_fins(var["T_tube_mean"],par_p["T_back"],hyp["theta"],L_c,D,par["Heta"])
+        h_free = hyp["coeff_h_back_fins_free"]*bht.back_h_fins(var["T_tube_mean"],par_p["T_back"],hyp["theta"],L_c,D,par["Heta"])
+        # h_free = 0.
+        h_forced = hyp["coeff_h_back_fins_forced"]*bht.ht_fins_forced_wiki(par["L_fin"],par["D"],par_p["u_back"]+0.9*par_p["u"])
+        var["h_back_fins"] = (h_free**3 + h_forced**3)**(1/3) + hyp["offset_h_back_fins"]
     else:
         pass
 
@@ -268,7 +350,7 @@ def h_rad_back_tube(par,par_p,var,hyp):
         eps = par["eps_ins"]
     else: 
         T_ref = var["T_tube_mean"]
-        eps = par["eps_he"]
+        eps = par["eps_hx_back"]
 
     h = eps*sigma*(T_ref+T_rad_back)*(T_ref**2+T_rad_back**2)
     var["h_rad_back_tube"]=h
@@ -282,7 +364,7 @@ def h_rad_back(par,par_p,var,hyp):
         eps = par["eps_ins"]
     else: 
         T_ref = var["T_abs_mean"]
-        eps = par["eps_he"]
+        eps = par["eps_hx_back"]
    
     T_rad_back_changed = hyp["T_rad_back_changed"]
 
@@ -299,6 +381,22 @@ def h_rad_back(par,par_p,var,hyp):
 
     # var["h_rad_back"] = 1E-12
 
+def a0(par,par_p,var):
+    var["a0"] = (1/(var["h_top_g"]+var["h_rad_g"]+1/par["R_g"]))*(par["alpha_g"]*par_p["G"] + var["h_top_g"]*par_p["T_amb"] + var["h_rad_g"]*par_p["T_sky"])
+
+def a1(par,par_p,var):
+    var["a1"] = (1/(var["h_top_g"]+var["h_rad_g"]+1/par["R_g"]))*(1/par["R_g"])
+
+def a2(par,par_p,var):
+    a1 = var["a1"]
+    var["a2"] = (var["h_top_g"] + var["h_rad_g"])*a1
+
+def a3(par,par_p,var):
+    var["a3"] = - (par["alpha_g"]*par_p["G"] - var["h_top_g"]*(var["a0"] - par_p["T_amb"]) - var["h_rad_g"]*(var["a0"] - par_p["T_sky"]))
+
+def S_star(par,par_p,var):
+    var["S_star"] = var["S"] - var["a3"] + var["h_rad_g"]*par_p["T_sky"]
+
 def h_rad_f(par,par_p,var,hyp):
     # var["h_rad_f"] = hyp["h_rad_f"]
 
@@ -312,28 +410,26 @@ def h_rad_f(par,par_p,var,hyp):
         T_ref = var["T_tube_mean"]
         T_B = var["T_Base_mean"]
 
-        eps = par["eps_he"]
+        eps = par["eps_hx_back"]
 
         h = eps*sigma*(T_ref+T_B)*(T_ref**2+T_B**2)
 
-    var["h_rad_f"] = h
+    var["h_rad_f"] = hyp["coeff_h_rad_f"]*h
 
 # Pour les ailettes, on ne prend pas en compte la composante radiative h_rad_back
 
 def Biot(lambd,k,h,delta):
+    """Calculates the Biot number
+    
+    Args:
+        lambd (float): thickness of the material [m]
+        k (float): thermal conductivity of the material [W/m/K]
+        h (float): heat transfer coefficient [W/m2/K]
+        delta (float): width [m]
+        
+    Returns:
+        float: Biot number"""
     return ((lambd*h)/k)*(1+lambd/delta)
-
-def Bi_f0(par,var):
-    h_back = var["h_back_fins"]
-    var["Bi_f0"] = Biot(par["lambd_ail"],par["k_ail"],h_back,par["delta_f0"])
-
-def Bi_f1(par,var):
-    h_back = var["h_back_fins"]
-    var["Bi_f1"] = Biot(par["lambd_ail"],par["k_ail"],h_back,par["delta_f1"])
-
-def Bi_f2(par,var):
-    h_back = var["h_back_fins"]
-    var["Bi_f1"] = Biot(par["lambd_ail"],par["k_ail"],h_back,par["delta_f2"])
 
 def Bi_f3(par,var):
     h_back = var["h_back_fins"]
@@ -345,8 +441,22 @@ def Bi_f3(par,var):
 
 # Radiation heat transfer coefficient using equation 560.3
 def h_rad(par,par_p,var,hyp):
+    """Calculates the radiation heat transfer coefficient and stores it in var["h_rad"]
     
-    eps = par["eps"]
+    $$
+    h_{rad} = \epsilon \sigma (T_{PV}+T_{sky})(T_{PV}^2+T_{sky}^2)
+    $$
+
+    Args:
+        par (dict): dictionary containing the PVT parameters
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        hyp (dict): dictionary containing the hypotheses
+        
+    Returns:
+        None"""
+    
+    eps = par["eps_PV"]
     sigma = hyp["sigma"]
     T_sky = par_p["T_sky"]
 
@@ -355,6 +465,31 @@ def h_rad(par,par_p,var,hyp):
     h = eps*sigma*(T_PV+T_sky)*(T_PV**2+T_sky**2)
     var["h_rad"]=h
     #var["h_rad"]=0.00001
+
+def h_rad_g(par,par_p,var,hyp):
+    """Calculates the radiative heat transfer coefficient between the glass and the sky and stores it in var["h_rad_g"]
+    
+    Args:
+        par (dict): dictionary containing the parameters of the PVT panel
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        hyp (dict): dictionary containing the hypotheses
+    
+    Returns:
+        None"""
+    
+    var["h_rad_g"] = bht.h_rad(par["eps_g"],var["T_glass"],par_p["T_sky"])
+
+def h_rad_tube_sky(par,par_p,var,hyp):
+    eps = par["eps_hx_top"]
+    sigma = hyp["sigma"]
+    T_sky = par_p["T_sky"]
+
+    T_tube = var["T_tube_mean"]
+
+    h = eps*sigma*(T_tube+T_sky)*(T_tube**2+T_sky**2)
+
+    var["h_rad_tube_sky"]=h
 
 # Depends on T_PV
 def X_celltemp(par,var):
@@ -369,6 +504,19 @@ def X_celltemp(par,var):
     var["X_celltemp"]=X
 
 def eta_PV(par,par_p,var):
+    """Calculates the PV efficiency and stores it in var["eta_PV"]
+    
+    $$
+    \eta_{PV} = \eta_{nom}X_{celltemp}X_{rad}X_{corr}
+    $$
+
+    Args:
+        par (dict): dictionary containing the PVT parameters
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+    
+    Returns:
+        None"""
     
     eta_nom = par["eta_nom"]
     G = par_p["G"]
@@ -385,24 +533,52 @@ def eta_PV(par,par_p,var):
 
 # net absorbed solar radiation (total absorbed - PV power production)
 def S(par,par_p,var):
-    tau_alpha = par["tau_alpha"]
+    """Calculates the net absorbed solar radiation and stores it in var["S"]
+    
+    $$
+    S = \tau_{\alpha}G(1-\eta_{PV})
+    $$
+
+    Args:
+        par (dict): dictionary containing the PVT parameters
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+    
+    tau_g = par["tau_g"]
     G = par_p["G"]
 
     #T_PV = var["T_PV"]
     eta_PV = var["eta_PV"]
 
-    S = tau_alpha*G*(1-eta_PV)
+    S = tau_g*G*(1-eta_PV)
 
     var["S"] = S
 
 def Fp(par, var):
+    """Calculates the Fp factor and stores it in var["Fp"]
+    
+    $$
+    F_p = \frac{1}{h_{rad}R_{inter}+R_{inter}/R_t+1}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the PVT parameters    
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+
+
     R_inter = par["R_inter"]
-    R_t = par["R_top"]+1/var["h_top"]
 
     #T_PV = var["T_PV"]
     h_rad = var["h_rad"]
+    a2 = var["a2"]
 
-    Fp = 1/(h_rad*R_inter+R_inter/R_t+1)
+    Fp = 1/(a2*R_inter+h_rad*R_inter+1)
     var["Fp"] = Fp
 
 # Plus utilisé apparemment
@@ -420,6 +596,26 @@ def gamma(par):
     par["gamma"] = gamma
 
 def gamma0int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
+    """Calculates the gamma_0_int factor and returns it
+    
+    $$
+    \gamma_{0,int} = \frac{\alpha}{\lambda}\frac{\sinh(\alpha L_{fin}/\lambda)+\beta\alpha/\lambda\cosh(\alpha L_{fin}/\lambda)}{\cosh(\alpha L_{fin}/\lambda)+\beta\sinh(\alpha L_{fin}/\lambda)}
+    $$
+    
+    Args:
+        N (int): number of fins
+        L_fin (float): length of the fin
+        lambd (float): thickness of the fin
+        k (float): thermal conductivity of the fin
+        delta (float): width of the fin
+        delta_int (float): contact length between the fin and the tube
+        L_tube (float): length of the tube
+        h (float): heat transfer coefficient
+        
+    Returns:
+        Bi (float): Biot number
+        gamma_0_int (float): gamma_0_int factor"""
+    
     Bi = Biot(lambd,k,h,delta)
 
     alpha = math.sqrt(2*Bi)
@@ -429,25 +625,46 @@ def gamma0int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
     numerateur = (alpha/lambd)*math.sinh(arg) + ((beta*alpha)/lambd)*math.cosh(arg)
     denominateur = math.cosh(arg) + beta*math.sinh(arg)
 
-    return k*(numerateur/denominateur)*((lambd*N*delta_int)/L_tube)
+    return Bi,k*(numerateur/denominateur)*((lambd*N*delta_int)/L_tube)
 
 def gamma_0_int(par,var):
+    """Calculates the gamma_0_int factor and stores it in var["gamma_0_int"]"""
 
-    var["gamma_0_int"] = gamma0int(par["N_f0"],par["L_f0"],par["lambd_ail"],par["k_ail"],par["delta_f0"],par["delta_f0_int"],par["L_tube"],var["h_back_fins"])
+    var["Bi_f0"],var["gamma_0_int"] = gamma0int(par["N_f0"],par["L_f0"],par["lambd_ail"],par["k_ail"],par["delta_f0"],par["delta_f0_int"],par["L_tube"],var["h_back_fins"])
 
 def gamma1int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
+    """Calculates the gamma_1_int factor and returns it
+    
+    $$
+    \gamma_{1,int} = \frac{\alpha}{\lambda}\frac{\sinh(\alpha L_{fin}/\lambda)}{\cosh(\alpha L_{fin}/\lambda)}
+    $$
+    
+    Args:
+        N (int): number of fins
+        L_fin (float): length of the fin
+        lambd (float): thickness of the fin
+        k (float): thermal conductivity of the fin
+        delta (float): width of the fin
+        delta_int (float): contact length between the fin and the tube
+        L_tube (float): length of the tube
+        h (float): heat transfer coefficient
+        
+    Returns:
+        Bi (float): Biot number
+        gamma_1_int (float): gamma_1_int factor"""
     
     Bi = Biot(lambd,k,h,delta)
 
-    return 2*k*((lambd*N*delta_int)/L_tube)*math.tanh(math.sqrt(2*Bi)*(L_fin/lambd))*(math.sqrt(2*Bi)/lambd)
+    return Bi,2*k*((lambd*N*delta_int)/L_tube)*math.tanh(math.sqrt(2*Bi)*(L_fin/lambd))*(math.sqrt(2*Bi)/lambd)
 
 def gamma_1_int(par,var):
 
-    var["gamma_1_int"] = par["coeff_f1"]*gamma1int(par["N_f1"],par["L_f1"],par["lambd_ail"],par["k_ail"],par["delta_f1"],par["delta_f1_int"],par["L_tube"],var["h_back_fins"])
+    var["Bi_f1"],var["gamma_1_int"] = par["coeff_f1"]*gamma1int(par["N_f1"],par["L_f1"],par["lambd_ail"],par["k_ail"],par["delta_f1"],par["delta_f1_int"],par["L_tube"],var["h_back_fins"])
 
 def gamma_2_int(par,var):
 
-    Bi = var["Bi_f2"]
+    Bi = Biot(par["lambd_ail"],par["k_ail"],var["h_back_fins"],par["delta_f2"])
+    var["Bi_f2"] = Bi
     a = par["lambd_ail"]
     delta = par["delta_f2"]
 
@@ -471,6 +688,19 @@ def gamma_2_int(par,var):
     var["gamma_2_int"] = gamma_int
 
 def j(par,var):
+    """Calculates the j factor and stores it in var["j"]
+    
+    $$
+    j = \frac{1}{R_{inter}F'}+\frac{1}{R_bF'}-\frac{1}{R_{inter}}+\frac{h_{rad,f}}{F'}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+    
     R_inter = par["R_inter"]
     R_b = par["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
     h_rad_f = var["h_rad_f"]
@@ -479,7 +709,9 @@ def j(par,var):
     
     # j = 1/(R_inter*Fprime)+1/(R_b*Fprime)-1/R_inter+h_rad_f/Fprime
 
-    j = 1/(R_inter*Fprime)+1/(R_b*Fprime)-1/R_inter
+    # j = 1/(R_inter*Fprime)+1/(R_b*Fprime)-1/R_inter
+
+    j = 1/(Fprime*R_b) + 1/(R_inter*Fprime) - 1/R_inter
 
     if par["fin_2"] == 1:
 
@@ -490,9 +722,20 @@ def j(par,var):
     var["j"] = j
 
 def b(par,par_p,var):
-    T_sky = par_p["T_sky"]
-    T_amb = par_p["T_amb"]
-    R_t = par["R_top"]+1/var["h_top"]
+    """Calculates the b factor and stores it in var["b"]
+    
+    $$
+    b = S+h_{rad}T_{sky}+\frac{T_{amb}}{R_t}+\frac{T_{back}}{R_bF'}+\frac{h_{rad,f}T_{tube,mean}}{F'}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        par_p (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+
     T_back = par_p["T_back"]
     R_b = par["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
 
@@ -508,7 +751,11 @@ def b(par,par_p,var):
     # else:
     #     b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime)
 
-    b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime)
+    # b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime)
+
+    S_star = var["S_star"]
+
+    b = S_star + T_back/(R_b*Fprime)
 
 
     if par["fin_2"]==1:
@@ -519,6 +766,19 @@ def b(par,par_p,var):
     var["b"] = b
 
 def m(par, var):
+    """Calculates the m factor and stores it in var["m"]
+    
+    $$
+    m = \sqrt{\frac{F'j}{k_{abs}\lambda_{abs}}}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+
     lambd_abs = par["lambd_abs"]
     k_abs = par["k_abs"]
 
@@ -549,6 +809,19 @@ def qp_fin(par, var):
     var["qp_fin"] = q
 
 def c0(par, var):
+    """Calculates the c0 factor and stores it in var["c0"]
+    
+    $$
+    c_0 = \frac{1}{R_{inter}}+\frac{1}{R_bF'}+\frac{h_{rad,f}}{F'}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+    
+    Returns:
+        None"""
+
     p_int_tube = par["p_int_tube"]
     h_fluid = var["h_fluid"]
     C_B = par["C_B"]   
@@ -565,10 +838,24 @@ def c0(par, var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
+    h_rad_tube_sky = var["h_rad_tube_sky"]
+
     # vérifier l'homogénéité
-    var["c0"] = 1/chi + h_rad_f*p_ext_tube_rad + C_B + gamma
+    var["c0"] = 1/chi + h_rad_f*p_ext_tube_rad + C_B + gamma + h_rad_tube_sky
 
 def c2(par, var):
+    """Calculates the c2 factor and stores it in var["c2"]
+    
+    $$
+    c_2 = \frac{C_B+\gamma+h_{rad,f}p_{ext,tube,rad}}{c_0}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
 
     C_B = par["C_B"]  
 
@@ -587,6 +874,18 @@ def c2(par, var):
     var["c2"] = (C_B + gamma + h_rad_f*p_ext_tube_rad)/c0
 
 def e1(par,var):
+    """Calculates the e1 factor and stores it in var["e1"]
+    
+    $$
+    e_1 = \frac{C_B+p_{ext,tube,rad}h_{rad,f}}{c_0}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
 
     C_B = par["C_B"]
     p_ext_tube_rad = par["p_ext_tube_rad"]
@@ -597,6 +896,18 @@ def e1(par,var):
     var["e1"] = (1/c0)*(C_B+p_ext_tube_rad*h_rad_f)
 
 def e2(par,var):
+    """Calculates the e2 factor and stores it in var["e2"]
+
+    $$
+    e_2 = \frac{1}{c_0\chi}
+    $$
+
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables 
+
+    Returns:
+        None"""
 
     p_int_tube = par["p_int_tube"]
     h_fluid = var["h_fluid"]
@@ -607,6 +918,18 @@ def e2(par,var):
     var["e2"] = (1/c0)*(1/chi)
 
 def e3(par,var):
+    """Calculates the e3 factor and stores it in var["e3"]
+    
+    $$
+    e_3 = \frac{\gamma}{c_0}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
 
     h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
     p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
@@ -620,32 +943,35 @@ def e3(par,var):
 
     var["e3"] = (1/c0)*gamma
 
-def f0(par,var):
-
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
-    R_2 = par["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
-
-    var["f0"] = par["C_B"] + par["h_rad_f"]*par["p_ext_tube_rad"] + gamma
-
-def b1(par, var):
-    C_B = par["C_B"]  
-    h_rad_f = var["h_rad_f"]
-
-    c2 = var["c2"]
-    p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
+def e4(par,var):
 
     c0 = var["c0"]
+    var["e4"] = (1/c0)*var["h_rad_tube_sky"]
 
-    # A CHECK c0 ou pas dans la multiplication
-    # var["b1"] = (1/(C_B + h_rad_f*p_ext_tube_rad)) * (1/(1-c2))
-    # var["b1"] = (1/(C_B+h_rad_f*p_ext_tube_rad))*c0
+# non utilisée
+def f0(par,var):
+    """Calculates the f0 factor and stores it in var["f0"]
+    
+    $$
+    f_0 = C_B + h_{rad,f}p_{ext,tube,rad} + \gamma
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+    
+    C_B = par["C_B"]
+
+    h_rad_f = var["h_rad_f"]
+    p_ext_tube_rad = par["p_ext_tube_rad"]
 
     h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
+
+    h_rad_tube_sky = var["h_rad_tube_sky"]
+
     p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
     R_2 = par["R_2"]
     gamma_back = p_ext_tube/(R_2+1/h_back_tube)
@@ -653,42 +979,70 @@ def b1(par, var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    e1 = var["e1"]
+    var["f0"] = C_B + h_rad_f*p_ext_tube_rad + gamma + h_rad_tube_sky
 
+def b1(par, var):
+    """Calculates the b1 factor and stores it in var["b1"]
+    
+    $$
+    b_1 = \frac{1}{C_B + h_{rad,f}p_{ext,tube,rad}}\frac{1}{1-c_2}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+
+    C_B = par["C_B"]  
+    h_rad_f = var["h_rad_f"]
+    p_ext_tube_rad = par["p_ext_tube_rad"]
+
+    e1 = var["e1"]
+    f0 = var["f0"]
     # print('b1')
     # print('e1',e1)
     # print('gamma',gamma)
 
-    var["b1"] = 1/(C_B + h_rad_f*p_ext_tube_rad - (C_B + gamma + h_rad_f*p_ext_tube_rad)*e1)
+    var["b1"] = 1/(C_B + h_rad_f*p_ext_tube_rad - f0*e1)
                    
 def b2(par, var):
-    C_B = par["C_B"]  
-    h_rad_f = var["h_rad_f"]
+    """Calculates the b2 factor and stores it in var["b2"]
     
+    $$
+    b_2 = \frac{1}{c_0\chi}\frac{1}{1-c_2}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
 
-
-    p_int_tube = par["p_int_tube"]
-    h_fluid = var["h_fluid"]
-    chi = 1/(h_fluid*p_int_tube)
-    p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
-    c2 = var["c2"]
-
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
-    R_2 = par["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
-
+    f0 = var["f0"]
     e2 = var["e2"]
+    b1 = var["b1"]
 
     # Attention la Y AVAIT UNE ERREUR DE SIGNE
     # var["b2"] = (c2/(1-c2))*(1/(C_B + h_rad_f*p_ext_tube_rad))*(1/chi)
     # var["b2"] = (1/(C_B+h_rad_f*p_ext_tube_rad))*(1/chi)
-    var["b2"] = (C_B + gamma + h_rad_f*p_ext_tube_rad)*e2*var["b1"]
+    var["b2"] = f0*e2*b1
 
 def b3(par, var):
+    """Calculates the b3 factor and stores it in var["b3"]
+    
+    $$
+    b_3 = -\frac{1}{C_B + h_{rad,f}p_{ext,tube,rad}}\gamma
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
 
     C_B = par["C_B"]  
     h_rad_f = var["h_rad_f"]
@@ -702,14 +1056,48 @@ def b3(par, var):
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
     e3 = var["e3"]
-
+    f0 = var["f0"]
     # c'est vérifié c'est égal
     # var["b3"] = (-1/(C_B + h_rad_f*p_ext_tube_rad))*gamma
     # var["b3"] =  (-1/(C_B + h_rad_f*p_ext_tube_rad))*gamma
 
-    var["b3"] = ( (C_B + gamma + h_rad_f*p_ext_tube_rad)*e3 - gamma)*var["b1"]
+    var["b3"] = (f0*e3 - gamma)*var["b1"]
+
+def b4(par, var):
+
+    b1 = var["b1"]
+    C_B = par["C_B"]
+    
+    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
+    p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
+    R_2 = par["R_2"]
+    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
+    gamma_0_int = var["gamma_0_int"]
+    gamma_1_int = var["gamma_1_int"]
+    gamma = gamma_back + gamma_0_int + gamma_1_int
+    h_rad_f = var["h_rad_f"]
+    p_ext_tube_rad = par["p_ext_tube_rad"]
+    h_rad_tube_sky = var["h_rad_tube_sky"]
+
+    e4 =var["e4"]
+    f0 = var["f0"]
+
+    var["b4"] = b1*(f0*e4 - h_rad_tube_sky)
 
 def d1(par, var):
+    """Calculates the d1 factor and stores it in var["d1"]
+    
+    $$
+    d_1 = \frac{1}{c_0\chi}\frac{1}{1-c_2}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
+
     d0 = 1/var["c0"]
 
     p_int_tube = par["p_int_tube"]
@@ -732,6 +1120,18 @@ def d1(par, var):
     var["d1"] = -e1*(gamma+h_rad_f*p_ext_tube_rad) + h_rad_f*p_ext_tube_rad
 
 def d2(par, var):
+    """Calculates the d2 factor and stores it in var["d2"]
+    
+    $$
+    d_2 = \frac{1}{c_0\chi}\frac{1}{1-c_2}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
 
     d0 = 1/var["c0"]
 
@@ -756,6 +1156,18 @@ def d2(par, var):
     var["d2"] = -e2*(gamma+h_rad_f*p_ext_tube_rad)
 
 def d3(par, var):
+    """Calculates the d3 factor and stores it in var["d3"]
+    
+    $$
+    d_3 = \frac{1}{c_0\chi}\frac{1}{1-c_2}
+    $$
+    
+    Args:
+        par (dict): dictionary containing the parameters
+        var (dict): dictionary containing the variables
+        
+    Returns:
+        None"""
 
     d0 = 1/var["c0"]
 
@@ -778,7 +1190,48 @@ def d3(par, var):
     e3 = var["e3"]
     var["d3"] = -e3*(gamma+h_rad_f*p_ext_tube_rad) + gamma
 
+def d4(par, var):
+
+    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
+    p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
+    R_2 = par["R_2"]
+    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
+    gamma_0_int = var["gamma_0_int"]
+    gamma_1_int = var["gamma_1_int"]
+    gamma = gamma_back + gamma_0_int + gamma_1_int
+
+    h_rad_f = var["h_rad_f"]
+
+    # var["d3"] = -gamma**2*d0 + gamma - (h_rad_f*d0)/(1/gamma)
+
+    e4 = var["e4"]
+
+    var["d4"] = -e4*(gamma + h_rad_f*p_ext_tube_rad)
+
+
 def KTE_Bt(par,par_p,var):
+    """Calculates Ka_Bt, Th_Bt, and Ep_Bt factors and stores them in var["Ka_Bt"], var["Th_Bt"], and var["Ep_Bt"]
+    
+    $$
+
+    \Kappa_{Bt} = \frac{l_c}{R_inter} (F'-1) b_2 - \frac{\iota}{R_b} b_2 - 2*k_{abs}*lambd_{abs}*m*tanh(m*L_{af}) b_2
+    \Theta{Bt} = - \left( \frac{l_c}{R_inter} (F'-1) b_1 +    \right)
+    
+    g2 = 
+    h2 = 
+
+    i2 = 
+    i1 = -2*k_{abs}*lambd_{abs}*m*tanh(m*L_{af}) b_1
+    i3 = -2*k_{abs}*lambd_{abs}*m*tanh(m*L_{af}) b_3
+    i4 = 2*k_{abs}*lambd_{abs}*m*tanh(m*L_{af}) \frac{b}{j}
+    
+    g3 = \frac{l_c}{R_inter} (F'-1) b_3
+    g1 = 
+    g4 = l_c F' (S+h_{rad}*T_{sky}+T_{amb}/R_t)
+    
+    """
+
+
     lambd_abs = par["lambd_abs"]
     k_abs = par["k_abs"]
     W = par["W"]
@@ -789,7 +1242,7 @@ def KTE_Bt(par,par_p,var):
     p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
 
     R_inter = par["R_inter"]
-    R_t = par["R_top"]+1/var["h_top"]
+
     R_b = par["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
     h_fluid = var["h_fluid"]
 
@@ -817,6 +1270,7 @@ def KTE_Bt(par,par_p,var):
     b1 = var["b1"]
     b2 = var["b2"]
     b3 = var["b3"]
+    b4 = var["b4"]
 
     # T_PV - T_B 
     # if par_p["compt"] <=2:
@@ -826,31 +1280,37 @@ def KTE_Bt(par,par_p,var):
     #     g1 = (l_c/R_inter)*(Fprime-1)*b1
     # else:
     #     T_abs = var["T_abs_mean"]
-    #     g4 = l_c*Fprime*(S+h_rad*T_sky+T_amb/R_t + T_abs/R_inter)
+    #     g4 = l_c*(S+h_rad*T_sky+T_amb/R_t + T_abs/R_inter)
     #     g3 = -(l_c/R_inter)*b3
     #     g2 = -(l_c/R_inter)*b2
     #     g1 = -(l_c/R_inter)*b1
 
-    g4 = l_c*Fprime*(S+h_rad*T_sky+T_amb/R_t)
+    S_star = var["S_star"]
+
+
+    g5 = l_c*Fprime*S_star
+    g4 = (l_c/R_inter)*(Fprime-1)*b4
     g3 = (l_c/R_inter)*(Fprime-1)*b3
     g2 = (l_c/R_inter)*(Fprime-1)*b2
     g1 = (l_c/R_inter)*(Fprime-1)*b1
 
     # T_B - T_back
-    h4 = 0.
+    h5 = 0.
+    h4 = (-iota/R_b)*b4
     h3 = (iota/R_b)*(1-b3)
     h2 = (-iota/R_b)*b2
     h1 = (-iota/R_b)*b1
 
     # 2q'_absfin
-    i4 = 2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*(b/j)
+    i5 = 2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*(b/j)
+    i4 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b4
     i3 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b3
     i2 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b2
     i1 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b1
 
     K =  g2+h2+i2
     T = -(g1+h1+i1)
-    E = (g3+h3+i3)*T_back + (g4+h4+i4)
+    E = (g3+h3+i3)*T_back + (g4+h4+i4)*T_sky + (g5+h5+i5)
 
     var["Ka_Bt"] = K
     var["Th_Bt"] = T
@@ -865,11 +1325,13 @@ def KTE_tf(par,par_p,var):
     b1 = var["b1"]
     b2 = var["b2"]
     b3 = var["b3"]
+    b4 = var["b4"]
 
     d0 = 1/var["c0"]
     d1 = var["d1"]
     d2 = var["d2"]
     d3 = var["d3"]
+    d4 = var["d4"]
 
     C_B = par["C_B"]
     p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
@@ -887,6 +1349,7 @@ def KTE_tf(par,par_p,var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
+    T_sky = par_p["T_sky"]
     T_back = par_p["T_back"]
 
     # var["Ka_tf"] = Ka_Bt - (gamma*b2)/c3
@@ -897,20 +1360,20 @@ def KTE_tf(par,par_p,var):
     var["Th_tf"] = 1 - d1*b1 + Th_Bt
     # calculé : puis test avec changement des signes ci-dessus
     #     var["Th_tf"] = 1 - d1*b1 + Th_Bt
-    var["Ep_tf"] = Ep_Bt + (d1*b3 + d3) * T_back
+    var["Ep_tf"] = Ep_Bt + (d1*b3 + d3) * T_back + (d1*b4 + d4) * T_sky
 
     # var["Ka_tf"] = (d0*b2)/(chi*R_B) + (d0/chi**2) - 1/chi
     # var["Th_tf"] = 1 - (d0*b1)/(chi*R_B)
     # var["Ep_tf"] = ( (d0*b3)/(chi*R_B) + (d0*gamma)*chi )*T_back
 
 def Cp(par,par_p,var,hyp):
-    T_m = (var["T_fluid_in"]+var["T_fluid_out"])/2
+    T_m = (var["T_fluid_in"]+var["T_fluid_out"])/2 # K
 
-    p_fluid = hyp["p_fluid"]
+    p_fluid = hyp["p_fluid"] # bar
     fluid = hyp["fluid"]
-    glycol_rate = hyp["glycol_rate"]
+    glycol_rate = hyp["glycol_rate"] # %
 
-    var["Cp"] = PropsSI('C','P', p_fluid, 'T', T_m, f'INCOMP::{fluid}[{glycol_rate}]')
+    var["Cp"] = PropsSI('C','P', p_fluid*100000, 'T', T_m, f'INCOMP::{fluid}[{glycol_rate}]')
 
 
 def ab_f(par,par_p,var):
@@ -1028,6 +1491,7 @@ def T_Base_mean(par, par_p,var): #T_fluid has already been used for q_f_p and T_
     T_fluid = var["T_fluid_mean"]
     q_tube_fluid = var["q_tube_fluid"]
     T_back = par_p["T_back"]
+    T_sky = par_p["T_sky"]
 
     # res = (1/(C_B+h_rad_f))*(c0*q_tube_fluid - (1/chi)*T_fluid - gamma*T_back)
     # var["T_Base_mean"] = res
@@ -1037,45 +1501,30 @@ def T_Base_mean(par, par_p,var): #T_fluid has already been used for q_f_p and T_
     b1 = var["b1"]
     b2 = var["b2"]
     b3 = var["b3"]
+    b4 = var["b4"]
 
-    res = b1*q_tube_fluid + b2*T_fluid + b3*T_back
+    res = b1*q_tube_fluid + b2*T_fluid + b3*T_back + b4*T_sky
     var["T_Base_mean"] = res
 
 # Eq. 560.42 -> calculate the mean fin temperature
 def T_absfin_mean(par,par_p,var):
 
-    lambd_abs = par["lambd_abs"]
-    k_abs = par["k_abs"]
-    W = par["W"]
 
+    W = par["W"]
     L_af = par["L_af"]
 
-    R_t = par["R_top"] + 1/var["h_top"]
-    R_b = par["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
-    h_fluid = var["h_fluid"]
-
-    T_sky = par_p["T_sky"]
-    T_amb = par_p["T_amb"]
-    T_back = par_p["T_back"]
-
-    h_rad = var["h_rad"]
     S = var["S"]
-    Fprime = var["Fp"]
 
+    b = var["b"]
     j = var["j"]
     m = var["m"]
 
     T_B_mean = var["T_Base_mean"]
 
-    first_term = (S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime))/j
-
-    second_term = (T_B_mean-first_term)*tanh_or_inverse(m*L_af)/(m*L_af)
-
-    res = first_term + second_term
-    var["T_absfin_mean"] = res
+    var["T_absfin_mean"] = b/j + (T_B_mean-(b/j))*tanh_or_inverse(m*L_af)/(m*L_af)
 
 # Eq. 560.43 -> calculate the mean absorber temperature
-def T_abs_mean(par,var):
+def T_abs_mean(par,par_p,var):
 
     W = par["W"]
     l_B = par["l_B"]
@@ -1087,34 +1536,52 @@ def T_abs_mean(par,var):
     res = (l_B*T_Base_mean+(L_af*2)*T_absfin_mean)/W
     var["T_abs_mean"] = res
 
+    # if par_p["compt"] >= 1:
+    #     T_abs_mean_old = var["T_abs_mean"]
+    #     var["T_abs_mean"] = (res+T_abs_mean_old)/2
+
 def T_tube_mean(par,par_p,var):
 
     e1 = var["e1"]
     e2 = var["e2"]
     e3 = var["e3"]
+    e4 = var["e4"]
 
     T_B = var["T_Base_mean"]
     T_fluid = var["T_fluid_mean"]
     T_back = par_p["T_back"]
+    T_sky = par_p["T_sky"]
 
-    var["T_tube_mean"] = e1*T_B + e2*T_fluid + e3*T_back
+    var["T_tube_mean"] = e1*T_B + e2*T_fluid + e3*T_back + e4*T_sky
+
+def T_glass_mean(par,par_p,var):
+    alpha = par["alpha_g"]
+
+    h_top_g = var["h_top_g"]
+    h_rad_g = var["h_rad_g"]
+    R_g = par["R_g"]
+    G = par_p["G"]
+    T_amb = par_p["T_amb"]
+    T_sky = par_p["T_sky"]
+    T_PV = var["T_PV"]
+
+    res = (1/(h_top_g+h_rad_g+(1/R_g)))*(alpha*G + h_top_g * T_amb + h_rad_g * T_sky + (1/R_g)*T_PV)
+
+    var["T_glass"] = res
 
 # Eq. 560.1 -> calculte the mean PV surface temperature
 def T_PV_mean(par,par_p,var):
 
     R_inter = par["R_inter"]
-    R_t = par["R_top"] + 1/var["h_top"]
-    h_fluid = var["h_fluid"]
-
     T_sky = par_p["T_sky"]
-    T_amb = par_p["T_amb"]
     
     h_rad = var["h_rad"]
     S = var["S"]
-
+    Fprime = var["Fp"]
+    a3 = var["a3"]
     T_abs_mean = var["T_abs_mean"]
 
-    res = (1/(1/R_t+h_rad+1/R_inter))*(S+T_amb/R_t+h_rad*T_sky+(T_abs_mean/R_inter))
+    res = Fprime*R_inter*(S-a3+h_rad*T_sky+(T_abs_mean/R_inter))
 
     var["T_PV0"] = var["T_PV"]
     var["T_PV"] = res
@@ -1122,18 +1589,16 @@ def T_PV_mean(par,par_p,var):
 def T_PV_Base_mean(par,par_p,var):
 
     R_inter = par["R_inter"]
-    R_t = par["R_top"] + 1/var["h_top"]
-    h_fluid = var["h_fluid"]
-
     T_sky = par_p["T_sky"]
-    T_amb = par_p["T_amb"]
     
     h_rad = var["h_rad"]
     S = var["S"]
+    Fprime = var["Fp"]
+    a3 = var["a3"]
 
     T_Base_mean = var["T_Base_mean"]
 
-    res = (1/(1/R_t+h_rad+1/R_inter))*(S+T_amb/R_t+h_rad*T_sky+(T_Base_mean/R_inter))
+    res = Fprime*R_inter*(S-a3+h_rad*T_sky+(T_Base_mean/R_inter))
 
     var["T_PV_Base_mean"] = res
 
@@ -1150,14 +1615,14 @@ def T_PV_absfin_mean(par,var):
 # Eq. 560.47
 def Q_top_conv(par,par_p,var):
 
-    T_PV_m = var["T_PV"]
+    T_glass_m = var["T_glass"]
     T_amb = par_p["T_amb"]
 
-    R_t = par["R_top"] + 1/var["h_top"]
+    h_top_g = var["h_top_g"]
     W = par["W"]
     L = par["L_tube"]
 
-    var["Q_top_conv"] = (W*L)*(T_PV_m-T_amb)/R_t
+    var["Q_top_conv"] = (W*L)*(T_glass_m-T_amb)*h_top_g
 
 def Q_top_rad(par,par_p,var):
 
@@ -1259,7 +1724,29 @@ def Q_tube_back(par,par_p,var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    var["Q_tube_back"] = L*gamma*(T_tube_m - T_back)
+    var["Q_tube_back"] = L*gamma_back*(T_tube_m - T_back)
+
+def Q_f01(par,par_p,var):
+
+    L = par["L_tube"]
+
+    if par["fin_0"]==1:
+        gamma_0_int = var["gamma_0_int"]
+    else:
+        gamma_0_int = 0
+    if par["fin_1"]==1:
+        gamma_1_int = var["gamma_1_int"]
+    else:
+        gamma_1_int = 0
+
+    gamma = gamma_0_int + gamma_1_int
+    
+    T_tube_m = var["T_tube_mean"]
+    T_back = par_p["T_back"]
+
+    Q = L*gamma*(T_tube_m-T_back)
+
+    var["Q_f01"] = Q
 
 def Q_tube_back_wo_ins_conv(par,par_p,var):
     T_tube_m = var["T_tube_mean"]
@@ -1269,9 +1756,10 @@ def Q_tube_back_wo_ins_conv(par,par_p,var):
     h_back_tube = var["h_back_tube"]
     p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
     gamma_back = p_ext_tube*h_back_tube
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    # gamma_0_int = var["gamma_0_int"]
+    # gamma_1_int = var["gamma_1_int"]
+    # gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = gamma_back
 
     var["Q_tube_back_conv"] = L*gamma*(T_tube_m - T_back)
 
@@ -1292,7 +1780,10 @@ def T_ins_tube_mean(par,var):
     T_tube_mean = var["T_tube_mean"]
     Q_tube_back = var["Q_tube_back"]
 
-    var["T_ins_tube_mean"] = T_tube_mean - R_2*Q_tube_back
+    L = par["L_tube"]
+    p_ext_tube = par["p_ext_tube"]
+
+    var["T_ins_tube_mean"] = T_tube_mean - R_2*Q_tube_back/(L*p_ext_tube)
 
 def Q_ins_tube_back_conv(par,par_p,var):
 
@@ -1319,7 +1810,10 @@ def T_ins_absfin_mean(par,var):
     T_absfin_mean = var["T_absfin_mean"]
     Q_absfin_back = var["Q_absfin_back"]
 
-    var["T_ins_absfin_mean"] = T_absfin_mean - R_2*Q_absfin_back
+    L = par["L_tube"]
+    L_af = par["L_af"]
+
+    var["T_ins_absfin_mean"] = T_absfin_mean - R_2*Q_absfin_back/(L*2*L_af)
 
 def Q_ins_absfin_back_conv(par,par_p,var):
 
@@ -1394,16 +1888,6 @@ def Q_fluid(par,par_p,var):
     L = par["L_tube"]
 
     var["Q_tube_fluid"]=(L/chi)*(T_tube_m-T_fluid_m)
-
-    N_harp = par["N_harp"]
-    L = par["L_tube"]
-    mdot = par_p["mdot"]
-    Cp = var["Cp"]    
-    
-    T_f_out = var["T_fluid_out"]
-    T_f_in = par_p["T_fluid_in0"]
-
-    var["Q_fluid"] = (mdot*Cp*(T_f_out-T_f_in))/(N_harp)
 
 def Q_Base_tube(par,var):
     
@@ -1511,28 +1995,6 @@ def qp_f0(par,par_p,var):
 
     var["qp_f0"] = gamma_0_int*(T_fluid_m-T_back)
 
-def Q_f01(par,par_p,var):
-
-    L = par["L_tube"]
-
-    if par["fin_0"]==1:
-        gamma_0_int = var["gamma_0_int"]
-    else:
-        gamma_0_int = 0
-    if par["fin_1"]==1:
-        gamma_1_int = var["gamma_1_int"]
-    else:
-        gamma_1_int = 0
-
-    gamma = gamma_0_int + gamma_1_int
-    
-    T_tube_m = var["T_tube_mean"]
-    T_back = par_p["T_back"]
-
-    Q = L*gamma*(T_tube_m-T_back)
-
-    var["Q_f01"] = Q
-
 
 def qp_f1(par,par_p,var):
 
@@ -1560,20 +2022,15 @@ def one_loop(par,par_p,T_fluid_in,var,hyp):
 
     # print(par_p["T_sky"])
 
-    var["h_back_fins"] = hyp["h_back_fins0"]
-
     if par["fin_0"] == 1:
-        Bi_f0(par,var)
         gamma_0_int(par,var)
     else:
         var["gamma_0_int"] = 0
     if par["fin_1"] == 1:
-        Bi_f1(par,var)
         gamma_1_int(par,var)
     else:
         var["gamma_1_int"] = 0
     if par["fin_2"] == 1:
-        Bi_f2(par,var)
         gamma_2_int(par,var)
     else:
         var["gamma_2_int"] = 0
@@ -1583,25 +2040,39 @@ def one_loop(par,par_p,T_fluid_in,var,hyp):
     else:
         pass
 
+    
+    h_rad_g(par,par_p,var,hyp)
     h_rad(par,par_p,var,hyp) # T_PV
-    h_top(par,par_p,var,hyp)
+
+    if par["fin_0"] == 1 or par["fin_1"] == 1 or par["fin_2"] == 1:
+        h_top_mean(par,par_p,var,hyp)
+    else:
+        h_top(par,par_p,var,hyp)
+        # print('in one_loop',var["h_back"])
+
+    a0(par,par_p,var)
+    a1(par,par_p,var)
+    a2(par,par_p,var)
+
+    a3(par,par_p,var)
+
 
     X_celltemp(par,var) # T_PV
     eta_PV(par,par_p,var) # X_celltemp so only T_PV
     S(par,par_p,var) # eta_PV so only T_PV
-
+    S_star(par,par_p,var)
 
     Fp(par,var) # h_rad
-    # print('Fp',var["Fp"])
-    # print('h_back',var["h_back"])
+
+
     j(par,var) # Fp
-    # print('j',var["j"])
+
     m(par,var) # Fp and j
-    # print('m',var["m"])
+
     b(par,par_p,var) # h_rad, S and Fp
-    # print('b',var["b"])
+
     c0(par,var)
-    # print('c0',var["c0"])
+
     c2(par,var)
 
     e1(par,var)
@@ -1610,23 +2081,25 @@ def one_loop(par,par_p,T_fluid_in,var,hyp):
     # print('e2',var["e2"])
     e3(par,var)
     # print('e3',var["e3"])
+    e4(par,var)
 
+    f0(par,var)
     b1(par,var)
     # print('b1',var['b1'])
     b2(par,var)
     # print('b2',var['b2'])
     b3(par,var)
     # print('b3',var['b3'])
+    b4(par,var)
 
     KTE_Bt(par,par_p,var)
-    # print("Ka_Bt",var["Ka_Bt"])
-    # print("Th_Bt",var["Th_Bt"])
-    # print("Ep_Bt",var["Ep_Bt"])
+
 
 
     d1(par,var)
     d2(par,var)
     d3(par,var)
+    d4(par,var)
 
     KTE_tf(par,par_p,var)
     # print("Ka_tf",var["Ka_tf"])
@@ -1636,20 +2109,21 @@ def one_loop(par,par_p,T_fluid_in,var,hyp):
     ab_f(par,par_p,var) # utilise les coeffs Ka, Th et Ep calculés dans KTE_tf
 
     T_fluid_out(par,T_fluid_in,var)
-    # print('T_fluid_in0',par_p['T_fluid_in0'],'K')
-    # print('T_fluid_out',var['T_fluid_out'],'K')
+
     q_tube_fluid(par,par_p,T_fluid_in,var)
     # print(par_p["mdot"])
     # print(var["Cp"])
     # print('q_tube_fluid',var['q_tube_fluid'],'W/m')
     T_fluid_mean(par,T_fluid_in,var)
-    # print('T_fluid_mean',var['T_fluid_mean'],'K')
+
     T_Base_mean(par,par_p,var)
-    # print('T_Base_mean',var['T_Base_mean'],'K')
+
     T_tube_mean(par,par_p,var)
-    # print('T_tube_mean',var['T_tube_mean'],'K')
+
     T_absfin_mean(par,par_p,var)
-    T_abs_mean(par,var)
+
+    T_abs_mean(par,par_p,var)
+
 
     Q_tube_back(par,par_p,var)
     Q_absfin_back(par,par_p,var)
@@ -1661,7 +2135,7 @@ def one_loop(par,par_p,T_fluid_in,var,hyp):
     Q_ins_conv(par,par_p,var)
     Q_ins_rad(par,par_p,var)
 
-    if par["fin_0"] == 1 or par["fin_1"] == 1 or par["fin_2"] == 1:
+    if hyp["calc_h_back_mean"]==1:
         h_back_mean(par,par_p,var,hyp)
     else:
         h_back(par,par_p,var,hyp)
@@ -1669,14 +2143,17 @@ def one_loop(par,par_p,T_fluid_in,var,hyp):
 
     h_rad_back(par,par_p,var,hyp)
     h_back_tube(par,par_p,var,hyp)
+    h_rad_tube_sky(par,par_p,var,hyp)
     h_rad_back_tube(par,par_p,var,hyp)
     h_back_fins(par,par_p,var,hyp)
 
     h_rad_f(par,par_p,var,hyp)
 
+
     T_PV_mean(par,par_p,var)
     T_PV_Base_mean(par,par_p,var)
     T_PV_absfin_mean(par,var)
+    T_glass_mean(par,par_p,var)
 
     qp_PV_Base(par,var)
     qp_Base_back(par,par_p,var)
@@ -1687,7 +2164,7 @@ def one_loop(par,par_p,T_fluid_in,var,hyp):
     # print('end of iteration',par_p["compt"])
     # print('T_tube_mean',var['T_tube_mean'])
     # print('T_Base_mean',var['T_Base_mean'])
-    # print('T_PV',var['T_PV'])
+    # print('T_abs_mean',var['T_abs_mean'])
     # print("h_back",var["h_back"])
 
 
@@ -1709,7 +2186,7 @@ def compute_power(par,par_p,var):
     Q_fluid_back(par,par_p,var)
     Q_tube_back(par,par_p,var)
     Q_absfin_back(par,par_p,var)
-    Q_absfin_tube(par,par_p,var)
+    # Q_absfin_tube(par,par_p,var)
     Q_tube_back_wo_ins_conv(par,par_p,var)
     Q_tube_back_wo_ins_rad(par,par_p,var)
     Q_ins_tube_back_conv(par,par_p,var)
@@ -1719,6 +2196,8 @@ def compute_power(par,par_p,var):
 
     if par["fin_0"]==1 or par["fin_1"]==1:
         Q_f01(par,par_p,var)
+    else:
+        var["Q_f01"] = 0.
 
     power_balance_1(par,var)
     power_balance_3(par,var)
@@ -1738,12 +2217,18 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
 
         save_T_fluid_in0 = par_p["T_fluid_in0"]
         # Test without manifolds
+
         df,df_one,list_df_historic = simu_one_steady_state(par['exchanger'],par_p,hyp)
 
+
         hyp['h_back_prev'] = df_one['h_back'].values[0] # h_back de l'absorbeur
-        hyp['h_top_man'] = df_one['h_top'].values[0]   
+
+        hyp['h_top_man'] = df_one["h_top_g"].values[0]
+
 
         # Inlet manifold
+        par['manifold']["is_inlet_man"] = 1
+        par['manifold']["is_outlet_man"] = 0
 
         df,df_one,list_df_historic = simu_one_steady_state(par['manifold'],par_p,hyp)
         res['inlet_man'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
@@ -1753,8 +2238,6 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         # Première anomalie
 
         if par['anomaly1']['input_an'] == 1:
-
-            
 
             df,df_one,list_df_historic = simu_one_steady_state(par['anomaly1'],par_p,hyp)
             res['anomaly1'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
@@ -1771,6 +2254,8 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         par_p['T_fluid_in0'] = df_one['T_fluid_out'].values[0]
 
         # Outlet manifold
+        par["manifold"]["is_inlet_man"] = 0
+        par["manifold"]["is_outlet_man"] = 1
 
         df,df_one,list_df_historic = simu_one_steady_state(par['manifold'],par_p,hyp)
         res['outlet_man'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
@@ -1801,7 +2286,7 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
                 df_one[str] = [res['outlet_man'][1]['T_fluid_out'].values[0]]
             else:
                 df_one[str] = [res['exchanger'][1]['T_fluid_out'].values[0]]
-        elif str in ["T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
+        elif str in ["T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
             av = 0
             Aire_tot = 0
             for typ in res.keys():
@@ -1813,7 +2298,7 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
                 Aire_tot += Aire
                 av += res[typ][1][str].values[0]*Aire
             df_one[str] = [av/Aire_tot]
-        elif str in ["Q_S","Q_top_conv","Q_top_rad","Q_PV_plate","Q_PV_Base","Q_PV_absfin","Q_absfins_Base","Q_Base_tube","Q_tube_fluid","Q_ins_tube_back_conv","Q_ins_tube_back_rad","Q_ins_absfin_back_conv","Q_ins_absfin_back_rad","Q_tube_back_conv","Q_tube_back_rad","Q_absfin_back","Q_absfin_tube","Q_fluid","Q_f01"]:
+        elif str in ["Q_S","Q_top_conv","Q_top_rad","Q_PV_plate","Q_PV_Base","Q_PV_absfin","Q_absfins_Base","Q_Base_tube","Q_tube_fluid","Q_ins_tube_back_conv","Q_ins_tube_back_rad","Q_ins_absfin_back_conv","Q_ins_absfin_back_rad","Q_tube_back_conv","Q_tube_back_rad","Q_absfin_back","Q_f01"]:
             sum = 0
             for typ in res.keys():
                 if typ == 'inlet_man' or typ == 'outlet_man':
@@ -1843,21 +2328,27 @@ def simu_one_steady_state(par,par_p,hyp):
     for i in range(N_meander):
         # on crée un dictionnaire var pour chaque tranche de panneau
         var = {}
+        
         # Initialisatoin des h dans le dictionnaire var
-
         h_fluid(par,par_p,var,hyp)
         if i==0:
+            var["h_top_g"] = hyp["h_top0"]
             var["h_back"] = hyp["h_back0"]
             var["h_rad_back"] = hyp["h_rad_back0"]
             var["h_back_tube"] = hyp["h_back_tube0"]
+            var["h_rad_tube_sky"] = hyp["h_rad_tube_sky0"]
             var["h_rad_back_tube"] = hyp["h_rad_back_tube0"]
+            var["h_back_fins"] = hyp["h_back_fins0"]
             var["h_rad_f"] = hyp["h_rad_f0"]
 
         else:
+            var["h_top_g"] = h_top_prior
             var["h_back"] = h_back_prior
             var["h_rad_back"] = h_rad_back_prior
             var["h_back_tube"] = h_back_tube_prior
+            var["h_rad_tube_sky"] = h_rad_tube_sky_prior
             var["h_rad_back_tube"] = h_rad_back_tube_prior
+            var["h_back_fins"] = h_back_fins_prior
             var["h_rad_f"] = hyp["h_rad_f0"]
 
         var["Cp"] = hyp["Cp0"]
@@ -1865,37 +2356,36 @@ def simu_one_steady_state(par,par_p,hyp):
         new_guess_T_PV = list_T_PV[i]
         var["T_PV0"] = 0
         var["T_PV"] = new_guess_T_PV
-        
-
-        var['Slice'] = i
 
         T_f_in = list_T_f_out[i]
         var['T_fluid_in'] = T_f_in
         var["T_tube_mean"] = (var["T_PV"]+var["T_fluid_in"])/2
-        
+        var["T_glass"] = var["T_PV"]
+
+        var['Slice'] = i
+
+
+
         # print('boucle ',i)
         compt = 0
         par_p["compt"] = compt
-        while compt<= 8 or abs(var["T_PV"]-var["T_PV0"])>=0.001:
+        while compt<= 3 or abs(var["T_PV"]-var["T_PV0"])>=0.2:
         # while compt<= 2 or abs(var["PB_3"])>=0.01:
             compt+=1
+
             par_p["compt"] = compt
             one_loop(par,par_p,T_f_in,var,hyp)
-
             compute_power(par,par_p,var)
 
-            par_var = {'mdot' : par_p['mdot'],'G':par_p["G"],'Gp':par_p["Gp"],'T_amb':par_p["T_amb"],'u':par_p['u'],'h_top' : var['h_top'], 'h_back' : var['h_back'], 'h_rad_back' : var["h_rad_back"],'h_back_tube' : var['h_back_tube'], 'h_rad_back_tube' : var["h_rad_back_tube"],'h_back_fins' : var["h_back_fins"],"h_rad_f":var["h_rad_f"],'h_fluid' : var['h_fluid']}
+            par_var = {'mdot' : par_p['mdot'],'G':par_p["G"],'Gp':par_p["Gp"],'T_amb':par_p["T_amb"],'u':par_p['u'],"h_top_g" : var["h_top_g"], 'h_back' : var['h_back'], 'h_rad_back' : var["h_rad_back"],'h_back_tube' : var['h_back_tube'], 'h_rad_back_tube' : var["h_rad_back_tube"],'h_back_fins' : var["h_back_fins"],"h_rad_f":var["h_rad_f"],'h_fluid' : var['h_fluid']}
             var_copy = copy.deepcopy(var)
             to_add_conv = {**par_var, **var_copy}
             list_var_conv.append(to_add_conv)
 
-        one_loop(par,par_p,T_f_in,var,hyp)
-        #break
-        # T_PV_27(par,var)
-        
+        one_loop(par,par_p,T_f_in,var,hyp)        
         compute_power(par,par_p,var)
 
-        par_var = {'mdot' : par_p['mdot'],'G':par_p["G"],'Gp':par_p["Gp"],'T_amb':par_p["T_amb"],'u':par_p['u'],'h_top' : var['h_top'], 'h_back' : var['h_back'], 'h_rad_back' : var["h_rad_back"], 'h_back_tube' : var['h_back_tube'], 'h_rad_back_tube' : var["h_rad_back_tube"],'h_back_fins' : var["h_back_fins"],"h_rad_f":var["h_rad_f"],'h_fluid' : var['h_fluid']}
+        par_var = {'mdot' : par_p['mdot'],'G':par_p["G"],'Gp':par_p["Gp"],'T_amb':par_p["T_amb"],'u':par_p['u'],"h_top_g" : var["h_top_g"], 'h_back' : var['h_back'], 'h_rad_back' : var["h_rad_back"], 'h_back_tube' : var['h_back_tube'], 'h_rad_back_tube' : var["h_rad_back_tube"],'h_back_fins' : var["h_back_fins"],"h_rad_f":var["h_rad_f"],'h_fluid' : var['h_fluid']}
         var_copy = copy.deepcopy(var)
         to_add = {**par_var, **var_copy}
 
@@ -1907,9 +2397,12 @@ def simu_one_steady_state(par,par_p,hyp):
 
         list_df_historic.append(pd.DataFrame(list_var_conv))
 
+        h_top_prior = var["h_top_g"]
         h_back_prior = var["h_back"]
         h_rad_back_prior = var["h_rad_back"]
+        h_rad_tube_sky_prior = var["h_rad_tube_sky"]
         h_back_tube_prior = var["h_back_tube"]
+        h_back_fins_prior = var["h_back_fins"]
         h_rad_back_tube_prior = var["h_rad_back_tube"]
 
     df_mean = df.mean()
@@ -1924,10 +2417,10 @@ def simu_one_steady_state(par,par_p,hyp):
             df_one[str] = [par_p["T_fluid_in0"]]
         elif str == "T_fluid_out":
             df_one[str] = [list_T_f_out[N_meander]]
-        elif str in ["T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
+        elif str in ["T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
             df_one[str] = [df_mean[str]]
-        elif str in ["Q_top_conv","Q_top_rad","Q_PV_plate","Q_PV_Base","Q_PV_absfin","Q_absfins_Base","Q_Base_tube","Q_tube_fluid","Q_ins_tube_back_conv","Q_ins_tube_back_rad","Q_ins_absfin_back_conv","Q_ins_absfin_back_rad","Q_tube_back_conv","Q_tube_back_rad","Q_absfin_back","Q_absfin_tube","Q_fluid","Q_f01"]:
-            df_one[str] = [par["N_harp"]*df_sum[str]]
+        elif str in ["Q_top_conv","Q_top_rad","Q_PV_plate","Q_PV_Base","Q_PV_absfin","Q_absfins_Base","Q_Base_tube","Q_tube_fluid","Q_ins_tube_back_conv","Q_ins_tube_back_rad","Q_ins_absfin_back_conv","Q_ins_absfin_back_rad","Q_tube_back_conv","Q_tube_back_rad","Q_absfin_back","Q_f01"]:
+            df_one[str] = [df_sum[str]]
 
     df_one["Q_S"] = [par["W"]*par["L_tube"]*df_mean["S"]]
 
@@ -1970,19 +2463,18 @@ def simu_condi(par,hyp,condi_df):
 
     for i in range(0,len(condi_df)):
 
+
         par_p = {'G':condi_df["G"][i],"T_amb":condi_df["T_amb"][i],"T_back":condi_df["T_amb"][i],"u":condi_df["u"][i], "u_back" : condi_df["u_back"][i], "T_fluid_in0":condi_df["T_fluid_in"][i]}
         change_T_sky(par_p,hyp,'TUV')  # calculate Gp and T_sky
 
         par_p["mdot"] = condi_df["mdot"][i]
 
-        par_p["guess_T_PV"] = par_p["T_amb"] - 25
-        # par_p["guess_T_PV"] = (par_p["T_amb"]+par_p["T_fluid_in0"])/2
+        # par_p["guess_T_PV"] = par_p["T_amb"] - 25
+        par_p["guess_T_PV"] = (par_p["T_amb"]+par_p["T_fluid_in0"])/2
 
         df_one,res = simu_one_steady_state_all_he(par,par_p,hyp)
 
         df_res = pd.concat([df_res,df_one],ignore_index=True)
-        list_df.append(res['exchanger'][0])
-        list_list_df_historic.append(res['exchanger'][2])
         list_res.append(res)
 
         compt_test+=1
@@ -1994,17 +2486,17 @@ def simu_condi(par,hyp,condi_df):
     tab = pd.DataFrame()
 
     df_res['DT'] = df_res['T_fluid_out'] - df_res['T_fluid_in']
-    df_res['T_m'] = (df_res['T_fluid_out'] + df_res['T_fluid_in'])/2
-    df_res['T_m en °C'] = df_res['T_m']-273.15
+    df_res['Tm'] = (df_res['T_fluid_out'] + df_res['T_fluid_in'])/2
+    df_res['T_m en °C'] = df_res['Tm']-273.15
 
     tab['G'] = df_res['G'] # a0
-    tab['-(T_m - T_a)'] = -(df_res['T_m'] - df_res['T_amb']) # a1
-    # tab['-(T_m - T_a)^2'] = -(df_res['T_m'] - df_res['T_amb'])**2 # a2
-    tab['-(T_m - T_a)^2'] = 0.*df_res['T_m'] # a2
+    tab['-(T_m - T_a)'] = -(df_res['Tm'] - df_res['T_amb']) # a1
+    # tab['-(T_m - T_a)^2'] = -(df_res['Tm'] - df_res['T_amb'])**2 # a2
+    tab['-(T_m - T_a)^2'] = 0.*df_res['Tm'] # a2
     tab['-up x (T_m - T_a)'] = (df_res['u'] - 3) * tab['-(T_m - T_a)'] # a3
     # tab['Gp'] = df_res['Gp'] # a4
     tab['Gp'] = 0. * df_res['Gp'] # a4
-    tab['dT_m/dt'] = 0. * df_res['Gp'] # a5
+    tab['dTm/dt'] = 0. * df_res['Gp'] # a5
     tab['up x G'] = -(df_res['u'] - 3) * df_res['G'] # a6
     tab['up x Gp'] = -(df_res['u'] - 3) * df_res["Gp"] # a7
     tab['-(T_m - T_a)^4'] = -tab['-(T_m - T_a)']**4 # a8
@@ -2037,20 +2529,20 @@ def simu_condi(par,hyp,condi_df):
 
     df_res = pd.concat([tab,df_res_to_concat],axis=1)
 
-    return df_res,X,list_res,list_df,list_list_df_historic
+    return df_res,X,list_res
 
 def find_a_i(df,par):
     tab = pd.DataFrame()
 
     df['DT'] = df['T_fluid_out'] - df['T_fluid_in']
-    df['T_m'] = (df['T_fluid_out'] + df['T_fluid_in'])/2
+    df['Tm'] = (df['T_fluid_out'] + df['T_fluid_in'])/2
 
-    df['T_m en °C'] = df['T_m']-273.15
+    df['T_m en °C'] = df['Tm']-273.15
 
     tab['G'] = df['G'] # a0
-    tab['-(T_m - T_a)'] = -(df['T_m'] - df['T_amb']) # a1
-    # tab['-(T_m - T_a)^2'] = -(df['T_m'] - df['T_amb'])**2 # a2
-    tab['-(T_m - T_a)^2'] = 0.*df['T_m'] # a2
+    tab['-(T_m - T_a)'] = -(df['Tm'] - df['T_amb']) # a1
+    # tab['-(T_m - T_a)^2'] = -(df['Tm'] - df['T_amb'])**2 # a2
+    tab['-(T_m - T_a)^2'] = 0.*df['Tm'] # a2
     tab['-up x (T_m - T_a)'] = (df['u'] - 3) * tab['-(T_m - T_a)'] # a3
     # tab['Gp'] = df['Gp'] # a4
     tab['Gp'] = 0. * df['Gp'] # a4
@@ -2129,8 +2621,8 @@ def simu_condi_mpe(par,condi_df,l,h_back,L,hyp):
     # Be careful here you have zeros for some columns
 
     df['DT'] = df['T_fluid_out'] - df['T_fluid_in']
-    df['T_m'] = (df['T_fluid_out'] + df['T_fluid_in'])/2
-    df['T_m*'] = (df['T_m'] - df['T_amb'])/df['G']
+    df['Tm'] = (df['T_fluid_out'] + df['T_fluid_in'])/2
+    df['T_m*'] = (df['Tm'] - df['T_amb'])/df['G']
     df['G x (T_m*)^2'] = df['G'] * df['T_m*']**2 * 0
     df['up x T_m*'] = (df['u'] - 3) * df['T_m*']
     df['Gp/G'] = df['Gp']/df['G']
@@ -2138,7 +2630,7 @@ def simu_condi_mpe(par,condi_df,l,h_back,L,hyp):
     df['up x Gp/G'] = (df['up'] * df['Gp'])/df['G']
     df['G^3 x (T_m*)^4'] = df['G']**3 * df['T_m*']**4 * 0
 
-    df['T_m en °C'] = df['T_m']-273.15
+    df['T_m en °C'] = df['Tm']-273.15
 
     coeff_density = [999.85,0.05332,-0.007564,0.00004323,-1.673e-7,2.447e-10]
     coeff_density = list(reversed(coeff_density))
@@ -2219,13 +2711,13 @@ def simu_condi_mpe_big(par,par_p,condi_df,l,L,h_back_top,h_back_bottom,N_harp,hy
     tab = pd.DataFrame()
 
     df_res['DT'] = df_res['T_fluid_out'] - df_res['T_fluid_in']
-    df_res['T_m'] = (df_res['T_fluid_out'] + df_res['T_fluid_in'])/2
-    df_res['T_m en °C'] = df_res['T_m']-273.15
+    df_res['Tm'] = (df_res['T_fluid_out'] + df_res['T_fluid_in'])/2
+    df_res['T_m en °C'] = df_res['Tm']-273.15
 
     # tab['G'] = 0. * df_res['G'] # a0
-    tab['-(T_m - T_a)'] = -(df_res['T_m'] - df_res['T_amb']) # a1
-    # tab['-(T_m - T_a)^2'] = -(df_res['T_m'] - df_res['T_amb'])**2 # a2
-    # tab['-(T_m - T_a)^2'] = 0.*df_res['T_m'] # a2
+    tab['-(T_m - T_a)'] = -(df_res['Tm'] - df_res['T_amb']) # a1
+    # tab['-(T_m - T_a)^2'] = -(df_res['Tm'] - df_res['T_amb'])**2 # a2
+    # tab['-(T_m - T_a)^2'] = 0.*df_res['Tm'] # a2
     # tab['-up x (T_m - T_a)'] = (df_res['u'] - 3) * tab['-(T_m - T_a)'] # a3
     # tab['Gp'] = df_res['Gp'] # a4
     # tab['Gp'] = 0. * df_res['Gp'] # a4
@@ -2281,13 +2773,6 @@ def change_T_sky(par_p,hyp,type):
 def change_N_ail(par,N):
     par["N_ail"] = N
 
-def change_a(par,var,a):
-    par["lambd_ail"]=a
-    Bi_f0(par,var)
-    Bi_f1(par,var)
-    Bi_f2(par,var)
-    Bi_f3(par,var)
-
 def change_air_layer(par,lambd_air):
     old_air_layer = par["lambd_air"]
     k_air = par["k_air"]
@@ -2301,7 +2786,7 @@ def change_air_layer(par,lambd_air):
     par["lambd_air"] = lambd_air
     #print(par["R_inter"])
 
-def change_b_htop(par,b_htop):
+def change_b_htop(par,par_p,b_htop):
     par["b_htop"] = b_htop
 
     change_u(par,par_p,par["u"])

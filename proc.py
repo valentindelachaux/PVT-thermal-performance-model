@@ -24,7 +24,7 @@ def linear_interpolation_condi(u_list,condi):
     pcov_list = []
 
     for i in range(len(u_list)):
-        popt,pcov = sco.curve_fit(lin,condi.loc[condi["u"]==u_list[i]]['T_m - T_a'],condi.loc[condi["u"]==u_list[i]]['Qdot / AG'])
+        popt,pcov = sco.curve_fit(lin,condi.loc[condi["u"]==u_list[i]]['Tm - T_a'],condi.loc[condi["u"]==u_list[i]]['Qdot / AG'])
         popt_list.append(popt)
         pcov_list.append(pcov)
 
@@ -36,7 +36,7 @@ def linear_interpolation_df(u_list,df_res):
     pcov_list = []
 
     for i in range(len(u_list)):
-        popt,pcov = sco.curve_fit(lin,-df_res.loc[df_res["u"]==u_list[i]]['-(T_m - T_a)'],df_res.loc[df_res["u"]==u_list[i]]['Qdot / AG'])
+        popt,pcov = sco.curve_fit(lin,-df_res.loc[df_res["u"]==u_list[i]]['-(Tm - T_a)'],df_res.loc[df_res["u"]==u_list[i]]['Qdot / AG'])
         popt_list.append(popt)
         pcov_list.append(pcov)
 
@@ -47,6 +47,9 @@ def AG(par):
 
 def l_B(par):
     par['l_B'] = par['l_c']
+
+def W(par):
+    par["W"] = par["L_abs"]/par["N_meander"]
 
 def tube(par):
     H_tube = par['H_tube']
@@ -65,7 +68,7 @@ def tube(par):
     par['delta'] = (par['W']-par['Dext_tube'])/2
 
 def L_af(par):
-    par['L_af'] = (par['W'] - par['l_c'])/2 + 1E-10
+    par['L_af'] = (par['W'] - par['l_B'])/2 + 1E-10
 
 def insulated(par):
     if par['lambd_ins']>0:
@@ -93,6 +96,9 @@ def C_B(par):
     k_riser_plate = par["k_riser_plate"]
 
     par["C_B"] = (l_c*k_riser_plate)/(lambd_riser_plate+1*1E-3)
+
+def R_g(par):
+    par["R_g"] = par["lambd_upper_glass"]/par["k_glass"]
 
 def R_top(par):
     par["R_top"] = par['lambd_upper_glass']/par['k_glass'] + par['lambd_upper_EVA']/par['k_EVA']
@@ -148,21 +154,28 @@ def import_input(path,file_name):
     
     par["exchanger"] = par_ex.copy()
     par["exchanger"]["is_exchanger"] = 1
-    par["exchanger"]["is_manifold"] = 0
+    par["exchanger"]["is_inlet_man"] = 0
+    par["exchanger"]["is_outlet_man"] = 0
     par["exchanger"]["is_anomaly"] = 0
 
     par['manifold'] = par_ex.copy()
     par['anomaly1'] = par_ex.copy()
 
+    for k in ['manifold','anomaly1']:
+        for f in ['fin_0','fin_1','fin_2','fin_3']:
+            par[k][f] = 0
+
     par["manifold"]["is_exchanger"] = 0
-    par["manifold"]["is_manifold"] = 1
+    par["manifold"]["is_inlet_man"] = 1
+    par["manifold"]["is_outlet_man"] = 1
     par["manifold"]["is_anomaly"] = 0
 
     for str in par_man.keys():
         par['manifold'][str] = par_man[str]
 
     par["anomaly1"]["is_exchanger"] = 0
-    par["anomaly1"]["is_manifold"] = 0
+    par["anomaly1"]["is_inlet_man"] = 0
+    par["anomaly1"]["is_outlet_man"] = 0
     par["anomaly1"]["is_anomaly"] = 1
     
     for str in par_an1.keys():
@@ -183,12 +196,14 @@ def import_input(path,file_name):
     for el in [par['exchanger'],par['manifold'],par['anomaly1']]:
         AG(el)
         tube(el)
+        l_B(el)
         L_af(el)
         insulated(el)
-        l_B(el)
+
         iota(el)
         X_rad(el)
         C_B(el)
+        R_g(el)
         R_top(el)
         R_inter(el)
         R_2(el)
@@ -226,8 +241,8 @@ def comp_power_coeff_Tout(coeff,AG,T_fluid_out,G,Gp,T_fluid_in,T_amb,u):
     return AG*((coeff[0]-coeff[6]*(u-3))*G - (coeff[1]+coeff[3]*(u-3))*((T_fluid_in+T_fluid_out)/2 - T_amb) + coeff[4]*Gp - coeff[7]*(u-3)*Gp - coeff[2]*((T_fluid_in+T_fluid_out)/2 - T_amb)**2 -coeff[8]*((T_fluid_in+T_fluid_out)/2 - T_amb)**4)
 
 ###
-def comp_power_coeff_Tm(coeff,AG,T_m,G,Gp,T_amb,u):
-    return AG*((coeff[0]-coeff[6]*(u-3))*G-(coeff[1]+coeff[3]*(u-3))*((T_m)/2 - T_amb)-coeff[4]*Gp-coeff[7]*(u-3)*Gp)
+def comp_power_coeff_Tm(coeff,AG,Tm,G,Gp,T_amb,u):
+    return AG*((coeff[0]-coeff[6]*(u-3))*G-(coeff[1]+coeff[3]*(u-3))*((Tm)/2 - T_amb)-coeff[4]*Gp-coeff[7]*(u-3)*Gp)
 
 # Create par
 
@@ -263,7 +278,7 @@ def create_inputs_from_excel(cond,par,hyp): # cond est le nom du fichier de donn
         axis=0, 
         inplace=True)
     
-    dict = {'ta':'T_amb','U':'u','tin':'T_fluid_in','te':'T_fluid_out','tm':'T_m','tm-ta':'T_m - T_a'}
+    dict = {'ta':'T_amb','U':'u','tin':'T_fluid_in','te':'T_fluid_out','tm':'Tm','tm-ta':'Tm - T_a'}
 
     column_headers = list(condi.columns.values)
 
@@ -272,10 +287,9 @@ def create_inputs_from_excel(cond,par,hyp): # cond est le nom du fichier de donn
         if head in list(dict.keys()):
             condi.rename(columns = {head:dict[head]}, inplace = True)
 
-    condi['Gp'] = 0.*condi['G']
     condi['T_fluid_in'] = condi['T_fluid_in']+273.15
     condi['T_fluid_out'] = condi['T_fluid_out']+273.15
-    condi['T_m'] = condi['T_m']+273.15
+    condi['Tm'] = condi['Tm']+273.15
     condi['T_amb'] = condi['T_amb']+273.15
 
     condi["u_back"] = hyp["u_back"]
@@ -286,19 +300,19 @@ def create_inputs_from_excel(cond,par,hyp): # cond est le nom du fichier de donn
 
     condi = condi.astype('float64')
 
-    condi['-(T_m - T_a)'] = -(condi['T_m'] - condi['T_amb']) # a1
+    condi['-(Tm - T_a)'] = -(condi['Tm'] - condi['T_amb']) # a1
 
     condi['Qdot / AG'] = condi['Qdot'] / par['AG']   
 
-    condi['-(T_m - T_a)'] = -( condi['T_m'] - condi['T_amb'] ) # a1
-    condi['-(T_m - T_a)^2'] = -condi['-(T_m - T_a)']**2 # a2
-    condi['-up x (T_m - T_a)'] = ( (condi['u'] - 3) * condi['-(T_m - T_a)'] ) # a3
+    condi['-(Tm - T_a)'] = -( condi['Tm'] - condi['T_amb'] ) # a1
+    condi['-(Tm - T_a)^2'] = -condi['-(Tm - T_a)']**2 # a2
+    condi['-up x (Tm - T_a)'] = ( (condi['u'] - 3) * condi['-(Tm - T_a)'] ) # a3
     # condi['Gp/G'] = df['Gp']/df['G']
     condi['Gp'] = 0. # * df['Gp'] à la place de 0 a4
-    condi['-dT_m/dt'] = 0. # a5
+    condi['-dTm/dt'] = 0. # a5
     condi['-up x G'] = -(condi['u'] - 3) * condi['G'] # a6
     condi['-up x Gp'] = -(condi['u'] - 3) * condi['Gp'] # df['Gp'] à la place de 0 a7
-    condi['-(T_m - T_a)^4'] = -condi['-(T_m - T_a)']**4 # a8 
+    condi['-(Tm - T_a)^4'] = -condi['-(Tm - T_a)']**4 # a8 
 
     return condi
 
