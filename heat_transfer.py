@@ -1,10 +1,8 @@
 import math
 import openpyxl as opxl
-from thermo.chemical import Chemical
-from thermo.chemical import Mixture
+
 import numpy as np
 import scipy.constants as scc
-import sympy as sp
 import scipy.integrate as integrate
 import ht
 from CoolProp.CoolProp import PropsSI
@@ -152,6 +150,41 @@ def ht_fins_forced_wiki(L_fin,D,u):
 def ht_fins_forced_wiki2(L_fin,D,u):
     return (2.47 - 2.55/(D*1000)**0.4)*((u/3.6)**0.9)*0.0872*(D*1000) + 4.31
   
+def speed_natural_convection(T_abs,T_amb,theta,L):
+
+    DT = T_abs - T_amb
+    T_mean = (T_abs+T_amb)/2
+
+    g = scc.g
+
+    beta = 1/T_mean     
+    Ra = Ra_L(T_abs,T_amb,theta,L)
+
+    speed = ((scc.g*beta*abs(DT)*L)/Ra)**(1/2)
+
+    return speed
+
+def Ra_L(T_abs,T_amb,theta,L):
+
+    DT = T_abs - T_amb
+
+    T_mean = (T_abs+T_amb)/2
+
+    g = scc.g
+
+    rho = air_rho(T_mean)
+    Cp = air_c_p()
+    mu = air_mu(T_mean)
+    nu = air_nu(T_mean)
+    lambd = air_k(T_mean)
+    alpha = (lambd)/(rho*Cp)
+    Pr = air_Pr()
+    beta = 1/T_mean
+
+    Ra_L= (g*beta*math.cos(math.pi/2-math.radians(theta))*abs(DT)*(L**4))/(nu*alpha)
+
+    return Ra_L
+
 def back_h_simple(T_abs,T_amb,theta,longueur): # dans 'Inputs', theta est l'angle par rapport à l'horizontale donc c'est theta_p
     # températures en K
     # angle theta en °
