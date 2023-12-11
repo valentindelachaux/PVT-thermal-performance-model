@@ -120,7 +120,7 @@ class duct:
 
         while abs(Q1-Q0)>0.001:
             Q0 = Q1
-            self.h_ext = bht.back_h_cylinder(self.T_ins,T_amb,self.HD + 2*self.t + 2*self.e_ins)
+            self.h_ext = bht.back_h_cylinder(self.T_ins,T_amb,self.HD + 2*self.t + 2*self.e_ins) + 1*1E-3
             Q1 = self.compute_heat_transfer(T_fluid_m,T_amb,self.h_ext)
 
         return Q1
