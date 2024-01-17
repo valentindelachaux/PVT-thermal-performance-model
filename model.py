@@ -2724,6 +2724,27 @@ def update_heat_transfer_coefficients(var, hyp, index):
         ...
 
 def simu_one_steady_state(par, par_p, hyp):
+    """Procedure which calculates the variables for one steady state
+    
+    \enumerate{
+        \item Initialize the var dictionary with all necessary keys and values
+        \item Loop until convergence is reached
+        \item Update heat transfer coefficients
+        \item Calculate the power balance
+        \item Update the fluid inlet temperature
+        \item Append the current iteration to the list of iterations
+        }
+        
+    Args:
+        par (dict): dictionary containing the parameters
+        par_p (dict): dictionary containing the meteo inputs
+        hyp (dict): dictionary containing the hypothesis
+        
+    Returns:
+        slices_df (DataFrame): dataframe containing the variables for each iteration
+        df_one (DataFrame): dataframe containing the variables for the last iteration
+        its_data_list (list): list of dataframes containing the variables for each iteration
+    """
 
     N_meander = par["N_meander"]
     slices_data = []
