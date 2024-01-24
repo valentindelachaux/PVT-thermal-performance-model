@@ -2576,19 +2576,17 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         save_T_fluid_in0 = par_p["T_fluid_in0"]
         # Test without manifolds
 
-        df,df_one,list_df_historic = simu_one_steady_state(par['exchanger'],par_p,hyp)
+        slices_df, df_one, its_data_list = simu_one_steady_state(par['exchanger'],par_p,hyp)
 
         hyp['h_back_prev'] = df_one['h_back'].values[0] # h_back de l'absorbeur
-
         hyp['h_top_man'] = df_one["h_top_g"].values[0]
-
 
         # Inlet manifold
         par['manifold']["is_inlet_man"] = 1
         par['manifold']["is_outlet_man"] = 0
 
-        df,df_one,list_df_historic = simu_one_steady_state(par['manifold'],par_p,hyp)
-        res['inlet_man'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
+        slices_df, df_one, its_data_list = simu_one_steady_state(par['manifold'],par_p,hyp)
+        res['inlet_man'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
 
         par_p["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
 
@@ -2596,8 +2594,8 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
 
         if par['anomaly1']['input_an'] == 1:
 
-            df,df_one,list_df_historic = simu_one_steady_state(par['anomaly1'],par_p,hyp)
-            res['anomaly1'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
+            slices_df, df_one, its_data_list = simu_one_steady_state(par['anomaly1'],par_p,hyp)
+            res['anomaly1'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
 
             par_p["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
         else:
@@ -2605,8 +2603,8 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
 
         # Echangeur 
 
-        df,df_one,list_df_historic = simu_one_steady_state(par['exchanger'],par_p,hyp)
-        res['exchanger'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
+        slices_df, df_one, its_data_list = simu_one_steady_state(par['exchanger'],par_p,hyp)
+        res['exchanger'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
 
         par_p['T_fluid_in0'] = df_one['T_fluid_out'].values[0]
 
@@ -2614,27 +2612,19 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         par["manifold"]["is_inlet_man"] = 0
         par["manifold"]["is_outlet_man"] = 1
 
-        df,df_one,list_df_historic = simu_one_steady_state(par['manifold'],par_p,hyp)
-        res['outlet_man'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
+        slices_df, df_one, its_data_list = simu_one_steady_state(par['manifold'],par_p,hyp)
+        res['outlet_man'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
 
         par_p["T_fluid_in0"] = save_T_fluid_in0
 
     else:
-        df,df_one,list_df_historic = simu_one_steady_state(par['exchanger'],par_p,hyp)
-        res['exchanger'] = [df.copy(),df_one.copy(),list_df_historic.copy()]
-
-    df_c = pd.DataFrame()
-
-    for str in res.keys():
-        df_c = pd.concat([df_c,res[str][1]],axis=0)
-
-    df_mean = df_c.mean()
-    df_sum = df_c.sum()
+        slices_df, df_one, its_data_list = simu_one_steady_state(par['exchanger'],par_p,hyp)
+        res['exchanger'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
 
     df_one = pd.DataFrame()
 
     for str in res["exchanger"][1].keys():
-        if str in ['mdot','G','Gp','T_amb','u']:
+        if str in ['mdot','G','Gp','T_amb','T_sky','T_back','T_back_rad','u']:
             df_one[str] = [par_p[str]]
         elif str == "T_fluid_in":
             df_one[str] = [par_p["T_fluid_in0"]]
@@ -2643,7 +2633,7 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
                 df_one[str] = [res['outlet_man'][1]['T_fluid_out'].values[0]]
             else:
                 df_one[str] = [res['exchanger'][1]['T_fluid_out'].values[0]]
-        elif str in ["T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
+        elif str in ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
             av = 0
             Aire_tot = 0
             for typ in res.keys():
@@ -2655,7 +2645,7 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
                 Aire_tot += Aire
                 av += res[typ][1][str].values[0]*Aire
             df_one[str] = [av/Aire_tot]
-        elif str in ["Qdot_S","Qdot_top_conv","Qdot_top_rad","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_Base_tube","Qdot_tube_fluid","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]:
+        elif str in ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]:
             sum = 0
             for typ in res.keys():
                 if typ == 'inlet_man' or typ == 'outlet_man':
@@ -2667,13 +2657,10 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
 
     return df_one,res
 
-import pandas as pd
-import numpy as np
-
 def initialize_var(var,par,par_p,hyp,i):
     # Initialize the var dictionary with all necessary keys and values
     
-    var = { 'Slice' : i,
+    var = {'Slice' : i,
            'T_PV0':0,
            'Cp': hyp['Cp0'],
             'h_rad_f':hyp['h_rad_f0'],
@@ -2741,7 +2728,7 @@ def simu_one_steady_state(par, par_p, hyp):
         hyp (dict): dictionary containing the hypothesis
         
     Returns:
-        slices_df (DataFrame): dataframe containing the variables for each iteration
+        slices_df (DataFrame): dataframe containing the variables for each slice of the panel
         df_one (DataFrame): dataframe containing the variables for the last iteration
         its_data_list (list): list of dataframes containing the variables for each iteration
     """
