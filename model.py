@@ -433,13 +433,13 @@ def a3(par,par_p,var):
     """
 
     a1 = var["a1"]
-    var["a3"] = (var["h_top_g"] + var["h_rad_g"])*a1
+    var["a3"] = (1-a1)*(1/par["R_g"])
 
 def a2(par,par_p,var):
-    var["a2"] = - (par["alpha_g"]*par_p["G"] - var["h_top_g"]*(var["a0"] - par_p["T_amb"]) - var["h_rad_g"]*(var["a0"] - par_p["T_sky"]))
+    var["a2"] = - var["a0"]/par["R_g"]
 
 def S_star(par,par_p,var):
-    var["S_star"] = var["S"] - var["a2"] + var["h_rad_g"]*par_p["T_sky"]
+    var["S_star"] = var["S"] - var["a2"] + var["h_rad"]*par_p["T_sky"]
 
 def h_rad_f(par,par_p,var,hyp):
     """Calculates the radiation heat transfer coefficient between the tube and the absorber and stores it in var["h_rad_f"]
