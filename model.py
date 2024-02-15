@@ -109,9 +109,14 @@ def h_top(par,par_p,var,hyp):
     Returns:
         None"""
 
+    # Manifold
     if par["is_inlet_man"] == 1 or par["is_outlet_man"] == 1:
-        var['h_top_g'] = hyp['h_top_man'] 
+        if hyp['method_h_top_g_manifold'] == 'like_exchanger':
+            var['h_top_g'] = hyp['h_top_man']
+        else:
+            raise ValueError("Method for h_top_g is not well defined for manifolds")
 
+    # Heat exchanger
     else:
         T_glass = var["T_glass"]
         T_amb = par_p["T_amb"]
@@ -121,14 +126,33 @@ def h_top(par,par_p,var,hyp):
         else:
             L_c = par["w_pan"]
 
-        h_free = hyp["coeff_h_top_free"]*bht.top_h_simple(T_glass,T_amb,hyp["theta"],L_c)
+        h_free = bht.top_h_simple(T_glass,T_amb,hyp["theta"],L_c)
+        h_forced_turbulent = bht.h_top_forced_turbulent(T_glass,T_amb,par_p["u"],L_c)
+        h_forced = bht.h_top_forced(T_glass,T_amb,par_p["u"],L_c)
 
-        if hyp["h_top_turbulent"] == 1:
-            h_forced = hyp["coeff_h_top_forced"]*bht.h_top_forced_turbulent(T_glass,T_amb,par_p["u"],L_c)
+        if hyp['method_h_top_g_exchanger'] == 'free_with_coeff':
+            var["h_top_g"] = hyp["coeff_h_top_free"]*h_free
+        elif hyp['method_h_top_g_exchanger'] == 'free':
+            var["h_top_g"] = h_free
+        elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent_with_coeff':
+            h_forced = hyp["coeff_h_top_forced"]*h_forced_turbulent
+        elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent':
+            var["h_top_g"] = h_forced_turbulent
+        elif hyp['method_h_top_g_exchanger'] == 'forced_with_coeff':
+            var["h_top_g"] = hyp["coeff_h_top_forced"]*h_forced
+        elif hyp['method_h_top_g_exchanger'] == 'forced':
+            var["h_top_g"] = h_forced
+        elif hyp['method_h_top_g_exchanger'] == 'free_forced_with_coeff':
+            if par_p['u'] < 0.1:
+                var["h_top_g"] = hyp["coeff_h_top_free"]*h_free
+            else:
+                var["h_top_g"] = hyp["coeff_h_top_forced"]*h_forced
+        elif hyp['method_h_top_g_exchanger'] == 'mixed_with_coeff':
+            var["h_top_g"] = ( (hyp["coeff_h_top_free"]*h_free)**3 + (hyp["coeff_h_top_forced"]*h_forced)**3 )**(1/3)
+        elif hyp['method_h_top_g_exchanger'] == 'mixed':
+            var["h_top_g"] = (h_free**3 + h_forced**3)**(1/3)
         else:
-            h_forced = hyp["coeff_h_top_forced"]*bht.h_top_forced(T_glass,T_amb,par_p["u"],L_c)
-
-        var["h_top_g"] = (h_free**3 + h_forced**3)**(1/3)
+            raise ValueError("Method for h_top_g is not well defined for exchanger")
 
 def h_back(par,par_p,var,hyp):
     """Calculates the convective heat transfer coefficient between the back of the panel and the ambient air and stores it var["h_back"]
@@ -144,43 +168,49 @@ def h_back(par,par_p,var,hyp):
 
     # Anomaly
     if  par["is_anomaly"] == 1:
-        var["h_back"] = hyp['h_back_prev']
+
+        if hyp['method_h_back_anomaly'] == "like_exchanger":
+            var["h_back"] = hyp['h_back_prev']
+        else:
+            raise ValueError("Method for h_back is not well defined for anomalies")
 
     # Manifold
     elif par["is_inlet_man"] == 1 or par["is_outlet_man"] == 1 :
-        if hyp['calc_h_back_manifold'] == 1:
-            L_c = par['H_tube']
 
-            if par["insulated"] == 1:
-                T_ref = var["T_ins_mean"]    
-            else:
-                T_ref = var["T_abs_mean"]
+        L_c = par['H_tube']
 
-            if par["tube_geometry"]=="rectangular" or par["tube_geometry"]=="square":
-                res = bht.back_h_mixed(T_ref,par_p["T_back"],par_p["u_back"],hyp["theta"],L_c)
-            else:
-                res = bht.back_h_cylinder(T_ref,par_p["T_back"],L_c)
-                
-            var["h_back"] = res
-            
+        if par["insulated"] == 1:
+            T_ref = var["T_ins_mean"]    
         else:
+            T_ref = var["T_abs_mean"]
+
+        if hyp['method_h_back_manifold'] == "free_cylinder":
+
+                # res = bht.back_h_mixed(T_ref,par_p["T_back"],par_p["u_back"],hyp["theta"],L_c)
+            var["h_back"] = bht.back_h_cylinder(T_ref,par_p["T_back"],L_c)
+
+        elif hyp['method_h_back_manifold'] == "like_exchanger":
             var["h_back"] = hyp['h_back_prev']
 
-    # Echangeur 
+        else:
+            raise ValueError("Method for h_back is not well defined for manifolds")
+
+    # Heat exchanger 
     else:
+
+        # Parameters
 
         if par["orientation"] == 'portrait':
             L_c = par["L_abs"]
         else:
             L_c = par["w_abs"]
 
-        # Si y a une erreur
+        # If error
         if var["T_abs_mean"]==None:
             print('T_abs_mean = None in h_back()')
             var["h_back"] = 0.5
         
-        # Cas avec ailettes
-
+        # Case with fins
         elif par["fin_0"] >= 1 or par["fin_1"] >= 1 or par["fin_2"] >= 1:
 
             D = par["D"]
@@ -191,42 +221,43 @@ def h_back(par,par_p,var,hyp):
                 print('here')
                 var["h_back"] = 1/(1/(hyp["coeff_h_back"]*bht.back_h_fins(var["T_abs_mean"],par_p["T_back"],hyp["theta"],L_c,D,par["Heta"]))+0.01)
 
-        # Cas sans ailette
-
+        # Cas without fins
         else:
             # theta est l'inclinaison du panneau par rapport à l'horizontale
             
-            # Cas isolé
             if par["insulated"] == 1:
                 T_ref = var["T_ins_mean"]
-            # Cas non-isolé
             else:
                 T_ref = var["T_abs_mean"]
 
-            h1 = hyp["coeff_h_back"]*bht.back_h_mixed(T_ref,par_p["T_back"],par_p["u_back"],hyp["theta"],L_c)
+            if hyp['method_h_back_hx'] == "free_with_coeff": 
+                var["h_back"] = hyp["coeff_h_back"]*bht.back_h_simple(T_ref,par_p["T_back"],hyp["theta"],L_c)
+            elif hyp['method_h_back_hx'] == "free":
+                var["h_back"] = bht.back_h_simple(T_ref,par_p["T_back"],hyp["theta"],L_c)
+            elif hyp['method_h_back_hx'] == "mixed":
+                var["h_back"] = bht.back_h_mixed(T_ref,par_p["T_back"],par_p["u_back"],hyp["theta"],L_c)
 
             # res = hyp["coeff_h_back"]*bht.back_h_simple(T_ref,par_p["T_back"],hyp["theta"],L_c)
             # print('res',res)
 
-            if h1 == None:
-                print('res = None in h_back()')
-                print('L_c',L_c)
-                print('T_abs',var["T_abs_mean"])
-                print('theta',hyp["theta"])
-                print('T_back',par_p["T_back"])
-                print('h_back_calculated',res)
-            else:
+            # if h1 == None:
+            #     print('res = None in h_back()')
+            #     print('L_c',L_c)
+            #     print('T_abs',var["T_abs_mean"])
+            #     print('theta',hyp["theta"])
+            #     print('T_back',par_p["T_back"])
+            #     print('h_back_calculated',res)
+            # else:
 
-                T_back_changed = hyp["T_back_changed"]
-                if T_back_changed > 0:
-                    T_back_changed += 273.15
-                    h2 = hyp["coeff_h_back"]*bht.back_h_mixed(T_ref,T_back_changed,par_p["u_back"],hyp["theta"],L_c)
-                    h1 = (h2*T_back_changed)/par_p["T_back"]
-                else:
-                    pass                          
+            #     T_back_changed = hyp["T_back_changed"]
+            #     if T_back_changed > 0:
+            #         T_back_changed += 273.15
+            #         h2 = hyp["coeff_h_back"]*bht.back_h_mixed(T_ref,T_back_changed,par_p["u_back"],hyp["theta"],L_c)
+            #         h1 = (h2*T_back_changed)/par_p["T_back"]
+            #     else:
+            #         pass                          
 
-                var["h_back"] = h1
-                # print("var['h_back']",var["h_back"])
+            #     var["h_back"] = h1
 
 def h_top_mean(par,par_p,var,hyp):
     
@@ -349,6 +380,7 @@ def h_rad_back_tube(par,par_p,var,hyp):
     h = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
     var["h_rad_back_tube"]=h
 
+
 def h_rad_back(par,par_p,var,hyp):
     """Calculates the radiation heat transfer coefficient between the absorber and the ambient air and stores it in var["h_rad_back"]
     
@@ -383,8 +415,6 @@ def h_rad_back(par,par_p,var,hyp):
         h1 = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
 
     var["h_rad_back"]=h1
-
-    # var["h_rad_back"] = 1E-12
 
 def a0(par,par_p,var):
     """Calculates the a0 factor and stores it in var["a0"]
@@ -467,7 +497,7 @@ def h_rad_f(par,par_p,var,hyp):
         T_ref = var["T_tube_mean"]
         T_B = var["T_Base_mean"]
 
-        eps = par["eps_hx_back"]
+        eps = par["eps_hx_top"]
 
         h = eps*sigma*(T_ref+T_B)*(T_ref**2+T_B**2)
 
@@ -1138,7 +1168,7 @@ def b4(par, var):
     h_rad_tube_sky = var["h_rad_tube_sky"]
     p_tube_sky = par["p_tube_sky"]
 
-    e4 =var["e4"]
+    e4 = var["e4"]
     f0 = var["f0"]
 
     var["b4"] = b1*(f0*e4 - h_rad_tube_sky*p_tube_sky)
@@ -1442,7 +1472,7 @@ def KTE_tf(par,par_p,var):
     p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
     h_rad_f = var["h_rad_f"]
 
-    R_B = 1/(C_B+p_ext_tube*h_rad_f)
+    R_B = 1/(C_B+p_ext_tube_rad*h_rad_f)
     p_int_tube = par["p_int_tube"]
     h_fluid = var["h_fluid"]
     chi = 1/(h_fluid*p_int_tube)
@@ -1465,11 +1495,16 @@ def KTE_tf(par,par_p,var):
     var["Th_tf"] = 1 - d1*b1 + Th_Bt
     # calculé : puis test avec changement des signes ci-dessus
     #     var["Th_tf"] = 1 - d1*b1 + Th_Bt
-    var["Ep_tf"] = Ep_Bt + (d1*b3 + d3) * T_back + (d1*b4 + d4) * T_sky
+    var["Ep_tf"] = Ep_Bt + (d1*b3 + d3) * T_back + (d1*b4 + d4) * T_sky 
 
     # var["Ka_tf"] = (d0*b2)/(chi*R_B) + (d0/chi**2) - 1/chi
     # var["Th_tf"] = 1 - (d0*b1)/(chi*R_B)
     # var["Ep_tf"] = ( (d0*b3)/(chi*R_B) + (d0*gamma)*chi )*T_back
+
+    # tentative de correction
+    var["Ka_tf"] = var["Ka_Bt"] - (var["e1"] * var["b2"] + var["e2"]) * (gamma + var["h_rad_tube_sky"] * par["p_tube_sky"])
+    var["Th_tf"] = 1 + var["Th_Bt"] + var["e1"] * var["b1"] * (gamma + var["h_rad_tube_sky"] * par["p_tube_sky"])
+    var["Ep_tf"] = var["Ep_Bt"] + (gamma - (var["e1"] * var["b3"] + var["e3"]) * (gamma + var["h_rad_tube_sky"] * par["p_tube_sky"])) * par_p["T_back"] + (var["h_rad_tube_sky"] * par["p_tube_sky"] - (var["e1"] * var["b4"] + var["e4"]) * (gamma + var["h_rad_tube_sky"] * par["p_tube_sky"])) * par_p["T_sky"]
 
 def Cp(par,par_p,var,hyp):
     """Calculates the specific heat capacity of the fluid and stores it in var["Cp"]
@@ -2052,7 +2087,7 @@ def Qdot_absfin_tube(par,par_p,var):
     p_ext_tube = par["p_ext_tube"];p_ext_tube_rad = par["p_ext_tube_rad"]
     h_rad_f = var["h_rad_f"]
 
-    var["Qdot_absfin_tube"] = L*p_ext_tube*h_rad_f*(T_absfin_m-T_tube_m)
+    var["Qdot_absfin_tube"] = L*p_ext_tube_rad*h_rad_f*(T_absfin_m-T_tube_m)
 
 def Qdot_tube_back(par,par_p,var):
 
@@ -2586,7 +2621,7 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         par['manifold']["is_outlet_man"] = 0
 
         slices_df, df_one, its_data_list = simu_one_steady_state(par['manifold'],par_p,hyp)
-        res['inlet_man'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
+        res['inlet_man'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
         par_p["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
 
@@ -2595,7 +2630,7 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         if par['anomaly1']['input_an'] == 1:
 
             slices_df, df_one, its_data_list = simu_one_steady_state(par['anomaly1'],par_p,hyp)
-            res['anomaly1'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
+            res['anomaly1'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
             par_p["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
         else:
@@ -2604,7 +2639,7 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         # Echangeur 
 
         slices_df, df_one, its_data_list = simu_one_steady_state(par['exchanger'],par_p,hyp)
-        res['exchanger'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
+        res['exchanger'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
         par_p['T_fluid_in0'] = df_one['T_fluid_out'].values[0]
 
@@ -2613,27 +2648,27 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
         par["manifold"]["is_outlet_man"] = 1
 
         slices_df, df_one, its_data_list = simu_one_steady_state(par['manifold'],par_p,hyp)
-        res['outlet_man'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
+        res['outlet_man'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
         par_p["T_fluid_in0"] = save_T_fluid_in0
 
     else:
         slices_df, df_one, its_data_list = simu_one_steady_state(par['exchanger'],par_p,hyp)
-        res['exchanger'] = [slices_df.copy(),df_one.copy(),its_data_list.copy()]
+        res['exchanger'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
     df_one = pd.DataFrame()
 
-    for str in res["exchanger"][1].keys():
+    for str in res["exchanger"]['df_one'].keys():
         if str in ['mdot','G','Gp','T_amb','T_sky','T_back','T_back_rad','u']:
             df_one[str] = [par_p[str]]
         elif str == "T_fluid_in":
             df_one[str] = [par_p["T_fluid_in0"]]
         elif str == "T_fluid_out":
             if par['manifold']['input_man'] == 1:
-                df_one[str] = [res['outlet_man'][1]['T_fluid_out'].values[0]]
+                df_one[str] = [res['outlet_man']['df_one']['T_fluid_out'].values[0]]
             else:
-                df_one[str] = [res['exchanger'][1]['T_fluid_out'].values[0]]
-        elif str in ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
+                df_one[str] = [res['exchanger']['df_one']['T_fluid_out'].values[0]]
+        elif str in mean_list:
             av = 0
             Aire_tot = 0
             for typ in res.keys():
@@ -2643,16 +2678,16 @@ def simu_one_steady_state_all_he(par,par_p,hyp):
                     typ_par = typ
                 Aire = par[typ_par]["N_harp"]*par[typ_par]["W"]*par[typ_par]["L_tube"]
                 Aire_tot += Aire
-                av += res[typ][1][str].values[0]*Aire
+                av += res[typ]['df_one'][str].values[0]*Aire
             df_one[str] = [av/Aire_tot]
-        elif str in ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]:
+        elif str in add_list:
             sum = 0
             for typ in res.keys():
                 if typ == 'inlet_man' or typ == 'outlet_man':
                     typ_par = "manifold"
                 else:
                     typ_par = typ
-                sum += res[typ][1][str].values[0]
+                sum += res[typ]['df_one'][str].values[0]
             df_one[str] = [sum]
 
     return df_one,res
@@ -2710,6 +2745,10 @@ def update_heat_transfer_coefficients(var, hyp, index):
     else:
         ...
 
+mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]
+add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
+
+
 def simu_one_steady_state(par, par_p, hyp):
     """Procedure which calculates the variables for one steady state
     
@@ -2745,7 +2784,7 @@ def simu_one_steady_state(par, par_p, hyp):
         par_p["compt"] = compt
         its_data = []
 
-        while compt <= 3 or abs(var["T_PV"] - var["T_PV0"]) >= 0.001:
+        while compt <= 3 or abs(var["T_PV"] - var["T_PV0"]) >= 0.00001:
             compt += 1
             par_p["compt"] = compt
 
@@ -2773,9 +2812,9 @@ def simu_one_steady_state(par, par_p, hyp):
             df_one[key] = [par_p["T_fluid_in0"]]
         elif key == "T_fluid_out":
             df_one[key] = [slices_df["T_fluid_out"].iloc[-1]]
-        elif key in ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]:
+        elif key in mean_list:
             df_one[key] = [df_mean[key]]
-        elif key in ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]:
+        elif key in add_list:
             df_one[key] = [df_sum[key]]
 
     return slices_df, df_one, its_data_list

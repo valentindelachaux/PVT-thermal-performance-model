@@ -142,3 +142,77 @@ def plot_graph(df_gr,par,case):
     ax.axis('off')
     print(df_gr["T_fluid_in"][case]-273.15)
     plt.show()
+
+def plot_graph(df_one):
+     
+     # Create a directed graph
+    G = nx.DiGraph()
+
+    # Add nodes with labels including temperature
+    nodes = ['Sun','T_amb', 'T_sky', 'T_glass', 'T_PV', 'T_Base', 'T_absfin', 
+            'T_tube', 'T_fluid', 'T_ins_absfin', 'T_ins_tube', 'T_back', 'T_back_rad']
+
+    nodes_keys = ['Sun','T_amb', 'T_sky', 'T_glass', 'T_PV', 'T_Base_mean', 'T_absfin_mean',
+                    'T_tube_mean', 'T_fluid_mean', 'T_ins_absfin_mean', 'T_ins_tube_mean', 'T_back', 'T_back_rad']
+
+    for i,node in enumerate(nodes):
+        if node == "Sun":
+            G.add_node(node, label=node)
+        else:
+            G.add_node(node, label=f"{node} = {round(df_one[nodes_keys[i]].iloc[0]-273.15,1)} °C")
+
+    # Add edges with heat transfer labels
+    edges = [('Sun','T_glass','Qdot_sun_glass'),('Sun','T_PV','Qdot_sun_PV'),
+            ('T_glass', 'T_amb', 'Qdot_top_conv'),('T_glass', 'T_sky', 'Qdot_top_rad'),
+            ('T_glass', 'T_PV', 'Qdot_glass_PV'), ('T_PV', 'T_Base', 'Qdot_PV_Base'), ('T_PV', 'T_sky', 'Qdot_PV_sky'),
+            ('T_PV', 'T_absfin', 'Qdot_PV_absfin'), ('T_absfin', 'T_Base', 'Qdot_absfin_Base'),
+            ('T_Base', 'T_tube', 'Qdot_Base_tube'), ('T_tube', 'T_fluid', 'Qdot_tube_fluid'),('T_tube','T_sky','Qdot_tube_sky'),
+            ('T_absfin', 'T_ins_absfin', 'Qdot_absfin_back'),
+            ('T_tube', 'T_ins_tube', 'Qdot_tube_back'),
+            ('T_ins_absfin', 'T_back', ''),
+            ('T_ins_absfin', 'T_back_rad', ''),
+            ('T_ins_tube', 'T_back', ''),
+            ('T_ins_tube', 'T_back_rad', '')]
+
+    for u, v, label in edges:
+        if label == '':
+            G.add_edge(u, v)
+        else:
+            G.add_edge(u, v, label=f"{round(df_one[label].iloc[0],1)} W")
+
+    # Manually set positions based on TikZ coordinates
+    pos = {'Sun': (18,0),
+        'T_amb': (6, 0),
+        'T_sky': (6, -5),
+        'T_glass': (12, -6),
+        'T_PV': (12, -16),
+        'T_Base': (9, -24),
+        'T_absfin': (14, -24),
+        'T_tube': (6, -29),
+        'T_fluid': (6, -42),
+        'T_ins_absfin': (15, -34),
+        'T_ins_tube': (12, -34),
+        'T_back': (12, -43),
+        'T_back_rad': (15, -43)
+    }
+
+    # Draw the graph with updated node labels
+    node_labels = nx.get_node_attributes(G, 'label')
+    edge_labels = nx.get_edge_attributes(G, 'label')
+
+    # nx.draw(G, pos, labels=node_labels, with_labels=True, node_color='lightblue', edge_color='black')
+    # nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+
+    # Création de la figure avec une taille augmentée
+    plt.figure(figsize=(8, 6))  # Augmenter la taille selon le besoin
+
+    # Dessin du graphe avec les positions et étiquettes de nœuds personnalisées
+    nx.draw(G, pos, labels=node_labels, with_labels=True, node_color='lightblue', edge_color='black', node_size=3000, font_size=10)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red')
+
+    # Ajustement des limites des axes avec une marge supplémentaire
+    ax = plt.gca()  # Obtenir l'objet des axes courants
+    ax.set_xlim([min(x for x, _ in pos.values()) - 5, max(x for x, _ in pos.values()) + 5])  # Ajuster selon les valeurs x min et max des positions
+    ax.set_ylim([min(y for _, y in pos.values()) - 5, max(y for _, y in pos.values()) + 5])  # Ajuster selon les valeurs y min et max des positions
+
+    plt.show()
