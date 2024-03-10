@@ -271,6 +271,9 @@ def Nu_forced_flat_plate_isoflux_turb(x, k,speed,nu,Pr): # 0.6 < Pr < 60
     Re_x = (speed*x)/nu
     return (k/x)*0.0308*Re_x**(4/5)*Pr**(1/3)
 
+def h_top_custom(T_s,T_amb,speed,longueur):
+    return 3+3*speed
+
 def h_top_forced(T_s,T_amb,speed,longueur):
 
     T_mean = (T_s+T_amb)/2

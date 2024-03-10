@@ -110,11 +110,9 @@ def R_2(par):
     par["R_2"] = par['lambd_ins']/par['k_ins'] + 1*1E-12
 
 
-def create_dict_from_excel(path,file_name,sheet):
+def create_dict_from_excel(path,sheet):
 
-    address = path+file_name
-
-    df = pd.read_excel(address,sheet_name=sheet)
+    df = pd.read_excel(path,sheet_name=sheet)
     df = df[['Label','Value','Unit']]
 
     for i in range(len(df)):
@@ -136,64 +134,58 @@ def create_dict_from_excel(path,file_name,sheet):
     return res
 
 # Retourne le dictionnaire de paramètres correpondant au PVT
-def import_input(path,file_name):
+def import_geometry(path):
 
     par = {}
-    par_ex = create_dict_from_excel(path,file_name,'Main')
-    par_man = create_dict_from_excel(path,file_name,'Manifolds')
-    par_an1 = create_dict_from_excel(path,file_name,'Anomaly_1')
-
-    # for i in range(len(par)):
-    #     if list(par.keys())[i] in ['manifold','anomaly1'] or type(par[list(par.keys())[i]]) != float:
-    #         pass
-    #     else:
-    #         if math.isnan(par[list(par.keys())[i]]):
-    #             par[list(par.keys())[i]] = 0
-    #         else:
-    #             pass
     
-    par["exchanger"] = par_ex.copy()
-    par["exchanger"]["is_exchanger"] = 1
-    par["exchanger"]["is_inlet_man"] = 0
-    par["exchanger"]["is_outlet_man"] = 0
-    par["exchanger"]["is_anomaly"] = 0
+    par_decomp = create_dict_from_excel(path,'decomp')
+    par_decomp = {k: v for k, v in par_decomp.items() if pd.notnull(v)}
 
-    par['manifold'] = par_ex.copy()
-    par['anomaly1'] = par_ex.copy()
+    par_pv = create_dict_from_excel(path,'PV')
 
-    for k in ['manifold','anomaly1']:
-        for f in ['fin_0','fin_1','fin_2','fin_3']:
-            par[k][f] = 0
+    par['decomp'] = par_decomp
+    par['pv'] = par_pv
 
-    par["manifold"]["is_exchanger"] = 0
-    par["manifold"]["is_inlet_man"] = 1
-    par["manifold"]["is_outlet_man"] = 1
-    par["manifold"]["is_anomaly"] = 0
+    count_manifold = 0
+    par['consider_manifolds'] = 0
 
-    for str in par_man.keys():
-        par['manifold'][str] = par_man[str]
+    for part in par_decomp.keys():
+        par[part] = create_dict_from_excel(path,par_decomp[part])
+        par[part].update(par_pv)
 
-    par["anomaly1"]["is_exchanger"] = 0
-    par["anomaly1"]["is_inlet_man"] = 0
-    par["anomaly1"]["is_outlet_man"] = 0
-    par["anomaly1"]["is_anomaly"] = 1
-    
-    for str in par_an1.keys():
-        par['anomaly1'][str] = par_an1[str]
+        if par_decomp[part] == 'manifold' and count_manifold == 0:
+            count_manifold += 1
+            par['consider_manifolds'] = 1
+            par[part]['is_inlet_man'] = 1
+            par[part]['is_outlet_man'] = 0
+            par[part]['is_exchanger'] = 0
 
-    print(par)
+        elif par_decomp[part] == 'manifold' and count_manifold == 1:
+            count_manifold += 1
+            par[part]['is_inlet_man'] = 0
+            par[part]['is_outlet_man'] = 1
+            par[part]['is_exchanger'] = 0
+
+        else:
+            par[part]['is_inlet_man'] = 0
+            par[part]['is_outlet_man'] = 0
+            par[part]['is_exchanger'] = 1
+        
 
     for dic in par.values():
-        for i in range(len(dic)):
-            if list(dic.keys())[i] in ['manifold','anomaly1'] or type(dic[list(dic.keys())[i]]) != float:
-                pass
-            else:
-                if math.isnan(dic[list(dic.keys())[i]]):
-                    dic[list(dic.keys())[i]] = 0
-                else:
+        if type(dic) == dict:
+            for i in range(len(dic)):
+                if list(dic.keys())[i] in [key for key,value in par_decomp.items()] or type(dic[list(dic.keys())[i]]) != float:
                     pass
+                else:
+                    if math.isnan(dic[list(dic.keys())[i]]):
+                        dic[list(dic.keys())[i]] = 0
+                    else:
+                        pass
+        else:
+            pass
     
-    for el in [par['exchanger'],par['manifold'],par['anomaly1']]:
+    for el in [par[key] for key,value in par_decomp.items()]:
         AG(el)
         tube(el)
         l_B(el)
@@ -208,7 +200,7 @@ def import_input(path,file_name):
         R_inter(el)
         R_2(el)
 
-    par["AG"] = par["exchanger"]["AG"]
+    par["AG"] = par["main"]["AG"]
 
     return par
 
