@@ -9,8 +9,6 @@ from CoolProp.CoolProp import PropsSI
 
 from matplotlib import pyplot as plt
 
-coeff_downward_cool_surface = 1.2
-
 import scipy.constants as scc
 
 def h_rad(eps,T_s,T_rad):
@@ -49,10 +47,10 @@ def grashof(beta, DT, L_c, rho, mu):
     return (g*beta*DT*L_c**3*rho**2)/(mu**2)
 
 def back_h_cylinder(T_tube,T_amb,D):
-    T_film = (T_tube+T_amb)/2
-    Gr = grashof(1/T_film, T_tube-T_amb, D, air_rho(T_film), air_mu(T_film))
+    T_mean = (T_tube+T_amb)/2
+    Gr = grashof(1/T_mean, T_tube-T_amb, D, air_rho(T_mean), air_mu(T_mean))
     Nu = ht.conv_free_immersed.Nu_horizontal_cylinder(air_Pr(),abs(Gr))
-    h = (air_k(T_film)/D)*Nu
+    h = (air_k(T_mean)/D)*Nu
     return h
 
 def back_h_mixed(T_abs,T_amb,u_back,theta,longueur):
@@ -60,7 +58,7 @@ def back_h_mixed(T_abs,T_amb,u_back,theta,longueur):
     h_back_forced = h_top_forced(T_abs,T_amb,u_back,longueur)
     return (h_back_free**3 + h_back_forced**3)**(1/3)
 
-def back_h(T_abs,T_amb,theta,longueur,largeur,N_ailettes,a):
+def back_h(T_abs,T_amb,theta,longueur,largeur,N_ailettes,a,coeff_downward_cool_surface=1.2):
     DT = T_abs - T_amb
     T_mean = (T_abs+T_amb)/2
 
@@ -74,7 +72,7 @@ def back_h(T_abs,T_amb,theta,longueur,largeur,N_ailettes,a):
     alpha = (lambd)/(rho*Cp)
     Pr = air_Pr()
     beta = 1/T_mean
-    
+
     """
     air = Mixture('air',T=T_mean,P=1e5)
     rho = air.rho
@@ -115,8 +113,6 @@ def back_h_fins(T_abs,T_amb,theta,longueur,D,L_a):
     Pr = air_Pr()
     beta = 1/T_mean
     
-    Ra = ((rho**2)*g*math.cos(math.radians(theta))*beta*Cp*(D**4)*DT)/(mu*lambd*longueur)
-
     Gr2=(g*beta*abs(DT)*D**3)*((L_a/longueur)**(1/2))*((D/L_a)**0.38)*(1/nu)**2
     Gr1=(g*beta*abs(DT)*D**4)/(math.sqrt(longueur*L_a)*nu**2)
 
@@ -263,11 +259,11 @@ def back_h_simple(T_abs,T_amb,theta,longueur): # dans 'Inputs', theta est l'angl
 #  local Nusselt number relations for a flat plate with a constant heat flux
 # https://courses.ansys.com/wp-content/uploads/2021/02/LT4_C2_L3-Handout-v2.pdf
 
-def Nu_forced_flat_plate_isoflux_lam(x,k,speed,nu,Pr): # 0.6 < Pr
+def h_forced_flat_plate_isoflux_lam(x,k,speed,nu,Pr): # 0.6 < Pr
     Re_x = (speed*x)/nu
     return (k/x)*0.453*Re_x**(1/2)*Pr**(1/3)
 
-def Nu_forced_flat_plate_isoflux_turb(x, k,speed,nu,Pr): # 0.6 < Pr < 60
+def h_forced_flat_plate_isoflux_turb(x, k,speed,nu,Pr): # 0.6 < Pr < 60
     Re_x = (speed*x)/nu
     return (k/x)*0.0308*Re_x**(4/5)*Pr**(1/3)
 
@@ -294,10 +290,10 @@ def h_top_forced(T_s,T_amb,speed,longueur):
     x_c = (nu*Re_c)/speed
 
     if x_c < longueur:
-        lam = integrate.quad(Nu_forced_flat_plate_isoflux_lam,0,x_c,args=(lambd,speed,nu,Pr))[0]
-        turb = integrate.quad(Nu_forced_flat_plate_isoflux_turb,x_c,longueur,args=(lambd,speed,nu,Pr))[0]
+        lam = integrate.quad(h_forced_flat_plate_isoflux_lam,0,x_c,args=(lambd,speed,nu,Pr))[0]
+        turb = integrate.quad(h_forced_flat_plate_isoflux_turb,x_c,longueur,args=(lambd,speed,nu,Pr))[0]
     else:
-        lam = integrate.quad(Nu_forced_flat_plate_isoflux_lam,0,longueur,args=(lambd,speed,nu,Pr))[0]
+        lam = integrate.quad(h_forced_flat_plate_isoflux_lam,0,longueur,args=(lambd,speed,nu,Pr))[0]
         turb = 0.
 
     return (1/longueur)*(lam+turb)
@@ -322,9 +318,9 @@ def h_top_forced_turbulent(T_s,T_amb,speed,longueur):
     x_c = (nu*Re_c)/speed
 
     if speed > 0.4:
-        h_int = integrate.quad(Nu_forced_flat_plate_isoflux_turb,0,longueur,args=(lambd,speed,nu,Pr))[0]
+        h_int = integrate.quad(h_forced_flat_plate_isoflux_turb,0,longueur,args=(lambd,speed,nu,Pr))[0]
     else:
-        h_int = integrate.quad(Nu_forced_flat_plate_isoflux_lam,0.,longueur,args=(lambd,speed,nu,Pr))[0]
+        h_int = integrate.quad(h_forced_flat_plate_isoflux_lam,0.,longueur,args=(lambd,speed,nu,Pr))[0]
 
     return (1/longueur)*h_int
     
