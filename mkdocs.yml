@@ -1,0 +1,57 @@
+site_name: MkDocs PVT-thermal-performance-model
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - navigation.top
+    - navigation.path
+    - search.suggest
+    - search.highlight
+    - content.tabs.link
+    - content.code.annotation
+    - content.code.copy
+  language : en
+  palette :
+    - scheme: default
+      toggle:
+        icon : material/toggle-switch-off-outline
+        name: Switch to dark mode
+      primary: teal
+      accent: purple
+    - scheme : slate
+      toggle:
+        icon : material/toggle-switch
+        name: Switch to light mode
+      primary : teal
+      accent : lime
+
+extra:
+  social:
+    - icon : fontawesome/brands/github-alt
+      link : https://github.com/valentindelachaux/PVT-thermal-performance-model
+  
+  markdown_extensions:
+  - pymdownx.highlight:
+    anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - admonition
+  - pymdownx.arithmatex:
+    generic : true
+  - footnotes
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.mark
+  - attr_list
+
+
+
+
+nav:
+  - "General": general.md
+  - "Heat transfer": heat_transfer.md
+  - "Model": model.md
+  - "Plot functions": plot_functions_here.md
+  - "Proc": proc.md

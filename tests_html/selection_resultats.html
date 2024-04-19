@@ -1,0 +1,48 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualisation de fichiers HTML</title>
+    <style>
+        /* Style CSS pour le centrage et le style du formulaire */
+        body {
+            font-family: "Times New Roman", serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 50vh;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <form id="fileForm" action="" method="GET" target="_blank">
+        <label for="fileSelect">Sélectionner un fichier à afficher :</label>
+        <select id="fileSelect" name="file">
+        <option value="tests_html/resultats_Temoin.html">Cas Temoin</option><option value="tests_html/resultats_Normal_CESIFroid_v1.html">Cas Normal_CESIFroid_v1</option><option value="tests_html/resultats_Normal_CESIFroid_v2.html">Cas Normal_CESIFroid_v2</option><option value="tests_html/resultats_Normal_CESIFroid_v3.html">Cas Normal_CESIFroid_v3</option><option value="tests_html/resultats_Normal_CESIFroid_v4.html">Cas Normal_CESIFroid_v4</option><option value="tests_html/resultats_Normal_CESIChaud_v1.html">Cas Normal_CESIChaud_v1</option><option value="tests_html/resultats_Normal_CESIChaud_v2.html">Cas Normal_CESIChaud_v2</option><option value="tests_html/resultats_Normal_CESIChaud_v3.html">Cas Normal_CESIChaud_v3</option><option value="tests_html/resultats_Normal_CESIChaud_v4.html">Cas Normal_CESIChaud_v4</option><option value="tests_html/resultats_Normal_Regeneration_v1.html">Cas Normal_Regeneration_v1</option><option value="tests_html/resultats_Normal_Regeneration_v2.html">Cas Normal_Regeneration_v2</option><option value="tests_html/resultats_Normal_Regeneration_v3.html">Cas Normal_Regeneration_v3</option><option value="tests_html/resultats_Normal_Regeneration_v4.html">Cas Normal_Regeneration_v4</option><option value="tests_html/resultats_Normal_PAC_v1.html">Cas Normal_PAC_v1</option><option value="tests_html/resultats_Normal_PAC_v2.html">Cas Normal_PAC_v2</option><option value="tests_html/resultats_Normal_PAC_v3.html">Cas Normal_PAC_v3</option><option value="tests_html/resultats_Normal_PAC_v4.html">Cas Normal_PAC_v4</option><option value="tests_html/resultats_Defavorable_CESIFroid_v1.html">Cas Defavorable_CESIFroid_v1</option><option value="tests_html/resultats_Defavorable_CESIFroid_v2.html">Cas Defavorable_CESIFroid_v2</option><option value="tests_html/resultats_Defavorable_CESIFroid_v3.html">Cas Defavorable_CESIFroid_v3</option><option value="tests_html/resultats_Defavorable_CESIFroid_v4.html">Cas Defavorable_CESIFroid_v4</option><option value="tests_html/resultats_Defavorable_CESIChaud_v1.html">Cas Defavorable_CESIChaud_v1</option><option value="tests_html/resultats_Defavorable_CESIChaud_v2.html">Cas Defavorable_CESIChaud_v2</option><option value="tests_html/resultats_Defavorable_CESIChaud_v3.html">Cas Defavorable_CESIChaud_v3</option><option value="tests_html/resultats_Defavorable_CESIChaud_v4.html">Cas Defavorable_CESIChaud_v4</option><option value="tests_html/resultats_Defavorable_Regeneration_v1.html">Cas Defavorable_Regeneration_v1</option><option value="tests_html/resultats_Defavorable_Regeneration_v2.html">Cas Defavorable_Regeneration_v2</option><option value="tests_html/resultats_Defavorable_Regeneration_v3.html">Cas Defavorable_Regeneration_v3</option><option value="tests_html/resultats_Defavorable_Regeneration_v4.html">Cas Defavorable_Regeneration_v4</option><option value="tests_html/resultats_Defavorable_PAC_v1.html">Cas Defavorable_PAC_v1</option><option value="tests_html/resultats_Defavorable_PAC_v2.html">Cas Defavorable_PAC_v2</option><option value="tests_html/resultats_Defavorable_PAC_v3.html">Cas Defavorable_PAC_v3</option><option value="tests_html/resultats_Defavorable_PAC_v4.html">Cas Defavorable_PAC_v4</option><option value="tests_html/resultats_Favorable_CESIFroid_v1.html">Cas Favorable_CESIFroid_v1</option><option value="tests_html/resultats_Favorable_CESIFroid_v2.html">Cas Favorable_CESIFroid_v2</option><option value="tests_html/resultats_Favorable_CESIFroid_v3.html">Cas Favorable_CESIFroid_v3</option><option value="tests_html/resultats_Favorable_CESIFroid_v4.html">Cas Favorable_CESIFroid_v4</option><option value="tests_html/resultats_Favorable_CESIChaud_v1.html">Cas Favorable_CESIChaud_v1</option><option value="tests_html/resultats_Favorable_CESIChaud_v2.html">Cas Favorable_CESIChaud_v2</option><option value="tests_html/resultats_Favorable_CESIChaud_v3.html">Cas Favorable_CESIChaud_v3</option><option value="tests_html/resultats_Favorable_CESIChaud_v4.html">Cas Favorable_CESIChaud_v4</option><option value="tests_html/resultats_Favorable_Regeneration_v1.html">Cas Favorable_Regeneration_v1</option><option value="tests_html/resultats_Favorable_Regeneration_v2.html">Cas Favorable_Regeneration_v2</option><option value="tests_html/resultats_Favorable_Regeneration_v3.html">Cas Favorable_Regeneration_v3</option><option value="tests_html/resultats_Favorable_Regeneration_v4.html">Cas Favorable_Regeneration_v4</option><option value="tests_html/resultats_Favorable_PAC_v1.html">Cas Favorable_PAC_v1</option><option value="tests_html/resultats_Favorable_PAC_v2.html">Cas Favorable_PAC_v2</option><option value="tests_html/resultats_Favorable_PAC_v3.html">Cas Favorable_PAC_v3</option><option value="tests_html/resultats_Favorable_PAC_v4.html">Cas Favorable_PAC_v4</option><option value="tests_html/resultats_TresDefavorable_CESIFroid_v1.html">Cas TresDefavorable_CESIFroid_v1</option><option value="tests_html/resultats_TresDefavorable_CESIFroid_v2.html">Cas TresDefavorable_CESIFroid_v2</option><option value="tests_html/resultats_TresDefavorable_CESIFroid_v3.html">Cas TresDefavorable_CESIFroid_v3</option><option value="tests_html/resultats_TresDefavorable_CESIFroid_v4.html">Cas TresDefavorable_CESIFroid_v4</option><option value="tests_html/resultats_TresDefavorable_CESIChaud_v1.html">Cas TresDefavorable_CESIChaud_v1</option><option value="tests_html/resultats_TresDefavorable_CESIChaud_v2.html">Cas TresDefavorable_CESIChaud_v2</option><option value="tests_html/resultats_TresDefavorable_CESIChaud_v3.html">Cas TresDefavorable_CESIChaud_v3</option><option value="tests_html/resultats_TresDefavorable_CESIChaud_v4.html">Cas TresDefavorable_CESIChaud_v4</option><option value="tests_html/resultats_TresDefavorable_Regeneration_v1.html">Cas TresDefavorable_Regeneration_v1</option><option value="tests_html/resultats_TresDefavorable_Regeneration_v2.html">Cas TresDefavorable_Regeneration_v2</option><option value="tests_html/resultats_TresDefavorable_Regeneration_v3.html">Cas TresDefavorable_Regeneration_v3</option><option value="tests_html/resultats_TresDefavorable_Regeneration_v4.html">Cas TresDefavorable_Regeneration_v4</option><option value="tests_html/resultats_TresDefavorable_PAC_v1.html">Cas TresDefavorable_PAC_v1</option><option value="tests_html/resultats_TresDefavorable_PAC_v2.html">Cas TresDefavorable_PAC_v2</option><option value="tests_html/resultats_TresDefavorable_PAC_v3.html">Cas TresDefavorable_PAC_v3</option><option value="tests_html/resultats_TresDefavorable_PAC_v4.html">Cas TresDefavorable_PAC_v4</option>
+        </select>
+        <br>
+        <input type="submit" value="Valider">
+    </form>
+
+    <script>
+        // JavaScript pour modifier l'action du formulaire selon le fichier sélectionné
+        const fileForm = document.getElementById("fileForm");
+        const fileSelect = document.getElementById("fileSelect");
+
+        fileForm.addEventListener("submit", function(event) {
+            // Modifier l'action du formulaire pour ouvrir le fichier sélectionné dans un nouvel onglet
+            fileForm.action = fileSelect.value;
+        });
+    </script>
+
+    <h2>Graph récapitulatif des cas</h2>
+    <iframe src="tests_html/GraphRecap.html" width="800" height="600"></iframe>
+    <br><br>
+</body>
+</html>
