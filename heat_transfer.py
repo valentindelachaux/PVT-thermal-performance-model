@@ -177,7 +177,7 @@ def Ra_L(T_abs,T_amb,theta,L):
     Pr = air_Pr()
     beta = 1/T_mean
 
-    Ra_L= (g*beta*math.cos(math.pi/2-math.radians(theta))*abs(DT)*(L**4))/(nu*alpha)
+    Ra_L = (g*beta*math.cos(math.pi/2-math.radians(theta))*abs(DT)*(L**4))/(nu*alpha)
 
     return Ra_L
 

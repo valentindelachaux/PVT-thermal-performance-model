@@ -319,6 +319,13 @@ def create_out():
     wbo = opxl.Workbook()
     return pathout,wbo
 
+def find_cell_by_name(wb,nom_variable):
+    my_range = wb.defined_names[nom_variable]
+    ch = my_range.value
+    ch2 = ch.split("!")[1]
+    ch3 = ch2.replace("$","")
+    return ch3
+
 def create_par():
     par = {}
 
@@ -490,7 +497,7 @@ def create_par():
 
     for i in range(len(list_parameters)):
         nom_var = list_parameters[i]
-        cell = ty.find_cell_by_name(wbi,nom_var)
+        cell = find_cell_by_name(wbi,nom_var)
         valeur = sheet_i[cell].value
         
         par[nom_var]=valeur

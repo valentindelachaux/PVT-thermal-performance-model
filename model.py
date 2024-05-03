@@ -5,23 +5,12 @@ import numpy as np
 import heat_transfer as bht
 import ht
 
+import model_ht as mht
+
 from CoolProp.CoolProp import PropsSI
 
 # %run C:\Users\BU05\Documents\Modele1D_Type560\Type560.py
 
-# Function for Excel
-# Search a cell by its nom_variable and return a string like "B3"
-def find_cell_by_name(wb,nom_variable):
-    my_range = wb.defined_names[nom_variable]
-    ch = my_range.value
-    ch2 = ch.split("!")[1]
-    ch3 = ch2.replace("$","")
-    return ch3
-
-
-## Relationship between wind and R_top
-# Modify the dictionary componentSpecs by updating the wind speed
-# To complete from Excel file
 def change_u(componentSpecs,stepConditions,wind_speed):
     stepConditions["u"] = wind_speed
     
@@ -33,398 +22,10 @@ def change_u(componentSpecs,stepConditions,wind_speed):
     componentSpecs["h_top"]=new_h_wind
     componentSpecs["R_t"]= componentSpecs["R_top"] + 1/componentSpecs["h_top"]
 
-# return tanh or 1/tanh
-def tanh_or_inverse(arg):
-    return math.tanh(arg)
-
-def h_fluid(componentSpecs,stepConditions,var,hyp):
-    """Calculates the convective heat transfer coefficient between the fluid and the tube wall and stores it in var["h_fluid"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the parameters of the PVT panel
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-    
-    Returns:
-        None
-        
-    """
-
-    D_tube = componentSpecs["D_tube"]
-    L_tube = componentSpecs["L_tube"]
-
-    if componentSpecs["is_inlet_man"] == 1 or componentSpecs["is_outlet_man"] == 1 and componentSpecs["geometry"] == "harp":
-        mdot = stepConditions["mdot"]/2
-    else:
-        mdot = stepConditions["mdot"]
-    
-    N_harp = componentSpecs["N_harp"]
-
-    T_fluid = stepConditions["T_fluid_in0"]
-
-    p_fluid = hyp["p_fluid"]
-    fluid = hyp["fluid"]
-    glycol_rate = hyp["glycol_rate"]
-
-    k_fluid = PropsSI('L', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
-    rho_fluid = PropsSI('D', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
-    mu_fluid = PropsSI('V', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
-    Pr = PropsSI('Prandtl', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
-
-    flow_rate_per_riser = (mdot/N_harp)/rho_fluid # en m3/s
-    tube_section = math.pi*(D_tube/2)**2
-
-    fluid_speed = flow_rate_per_riser/tube_section
-
-    Re = (rho_fluid*fluid_speed*D_tube)/mu_fluid
-
-    
-
-    if Re < 2000:
-        if componentSpecs["tube_geometry"] == "rectangular":
-            Nu = ht.conv_internal.Nu_laminar_rectangular_Shan_London(min(componentSpecs["H_tube"],componentSpecs["w_tube"])/max(componentSpecs["H_tube"],componentSpecs["w_tube"]))
-        else:
-            Nu = ht.conv_internal.Nu_conv_internal(Re,Pr,Method='Laminar - constant Q')
-    else:
-        Nu = ht.conv_internal.turbulent_Colburn(Re,Pr)
-
-    var["Re"] = Re
-    var["Nu"] = Nu
-    var["h_fluid"]  = (k_fluid/D_tube)*Nu
-
-def h_top(componentSpecs,stepConditions,var,hyp):
-    """Calculates the convective heat transfer coefficient between the top of the panel and the ambient air and stores it in var["h_top_g"]
-    
-    $$
-    h_{top} = \left( h_{free}^3 + h_{forced}^3 \right)^{1/3}
-    $$
-
-    Args:
-        componentSpecs (dict): dictionary containing the parameters of the PVT panel
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-    
-    Returns:
-        None"""
-
-    # Manifold
-    if componentSpecs["is_inlet_man"] == 1 or componentSpecs["is_outlet_man"] == 1:
-        if hyp['method_h_top_g_manifold'] == 'like_exchanger':
-            var['h_top_g'] = hyp['h_top_man']
-        else:
-            raise ValueError("Method for h_top_g is not well defined for manifolds")
-
-    # Heat exchanger
-    else:
-        T_glass = var["T_glass"]
-        T_amb = stepConditions["T_amb"]
-
-        if componentSpecs["orientation"]=="portrait":
-            L_c = componentSpecs["L_pan"]
-        else:
-            L_c = componentSpecs["w_pan"]
-
-        h_free = bht.top_h_simple(T_glass,T_amb,hyp["theta"],L_c)
-        h_forced_turbulent = bht.h_top_forced_turbulent(T_glass,T_amb,stepConditions["u"],L_c)
-        h_forced = bht.h_top_forced(T_glass,T_amb,stepConditions["u"],L_c)
-        h_custom = bht.h_top_custom(T_glass,T_amb,stepConditions["u"],L_c)
-
-        if hyp['method_h_top_g_exchanger'] == 'free_with_coeff':
-            var["h_top_g"] = hyp["coeff_h_top_free"]*h_free
-        elif hyp['method_h_top_g_exchanger'] == 'free':
-            var["h_top_g"] = h_free
-        elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent_with_coeff':
-            h_forced = hyp["coeff_h_top_forced"]*h_forced_turbulent
-        elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent':
-            var["h_top_g"] = h_forced_turbulent
-        elif hyp['method_h_top_g_exchanger'] == 'forced_with_coeff':
-            var["h_top_g"] = hyp["coeff_h_top_forced"]*h_forced
-        elif hyp['method_h_top_g_exchanger'] == 'forced':
-            var["h_top_g"] = h_forced
-        elif hyp['method_h_top_g_exchanger'] == 'free_forced_with_coeff':
-            if stepConditions['u'] < 0.1:
-                var["h_top_g"] = hyp["coeff_h_top_free"]*h_free
-            else:
-                var["h_top_g"] = hyp["coeff_h_top_forced"]*h_forced
-        elif hyp['method_h_top_g_exchanger'] == 'mixed_with_coeff':
-            var["h_top_g"] = ( (hyp["coeff_h_top_free"]*h_free)**3 + (hyp["coeff_h_top_forced"]*h_forced)**3 )**(1/3)
-        elif hyp['method_h_top_g_exchanger'] == 'mixed':
-            var["h_top_g"] = (h_free**3 + h_forced**3)**(1/3)
-        elif hyp['method_h_top_g_exchanger'] == 'custom':
-            var["h_top_g"] = h_custom
-        else:
-            raise ValueError("Method for h_top_g is not well defined for exchanger")
-
-def h_back(componentSpecs,stepConditions,var,hyp):
-    """Calculates the convective heat transfer coefficient between the back of the panel and the ambient air and stores it var["h_back"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the parameters of the PVT panel
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-        
-    Returns:
-        None"""
-
-    # Anomaly
-    if  componentSpecs["is_anomaly"] == 1:
-
-        if hyp['method_h_back_anomaly'] == "like_exchanger":
-            var["h_back"] = hyp['h_back_prev']
-        else:
-            raise ValueError("Method for h_back is not well defined for anomalies")
-
-    # Manifold
-    elif componentSpecs["is_inlet_man"] == 1 or componentSpecs["is_outlet_man"] == 1 :
-
-        L_c = componentSpecs['H_tube']
-
-        if componentSpecs["insulated"] == 1:
-            T_ref = var["T_ins_mean"]    
-        else:
-            T_ref = var["T_abs_mean"]
-
-        if hyp['method_h_back_manifold'] == "free_cylinder":
-
-                # res = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
-            var["h_back"] = bht.back_h_cylinder(T_ref,stepConditions["T_back"],L_c)
-
-        elif hyp['method_h_back_manifold'] == "like_exchanger":
-            var["h_back"] = hyp['h_back_prev']
-
-        else:
-            raise ValueError("Method for h_back is not well defined for manifolds")
-
-    # Heat exchanger 
-    else:
-
-        # Parameters
-
-        if componentSpecs["orientation"] == 'portrait':
-            L_c = componentSpecs["L_abs"]
-        else:
-            L_c = componentSpecs["w_abs"]
-
-        # If error
-        if var["T_abs_mean"]==None:
-            print('T_abs_mean = None in h_back()')
-            var["h_back"] = 0.5
-        
-        # Case with fins
-        elif componentSpecs["fin_0"] >= 1 or componentSpecs["fin_1"] >= 1 or componentSpecs["fin_2"] >= 1:
-
-            D = componentSpecs["D"]
-
-            if componentSpecs["N_ail"]<= 24:
-                var["h_back"] = hyp["coeff_h_back"]*bht.back_h_simple(var["T_abs_mean"],stepConditions["T_back"],hyp["theta"],L_c)
-            else:
-                print('here')
-                var["h_back"] = 1/(1/(hyp["coeff_h_back"]*bht.back_h_fins(var["T_abs_mean"],stepConditions["T_back"],hyp["theta"],L_c,D,componentSpecs["Heta"]))+0.01)
-
-        # Cas without fins
-        else:
-            # theta est l'inclinaison du panneau componentSpecs rapport à l'horizontale
-            
-            if componentSpecs["insulated"] == 1:
-                T_ref = var["T_ins_mean"]
-            else:
-                T_ref = var["T_abs_mean"]
-
-            if hyp['method_h_back_hx'] == "free_with_coeff": 
-                var["h_back"] = hyp["coeff_h_back"]*bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
-            elif hyp['method_h_back_hx'] == "free":
-                var["h_back"] = bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
-            elif hyp['method_h_back_hx'] == "mixed":
-                var["h_back"] = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
-            elif hyp['method_h_back_hx'] == 'parametric':
-                var['h_back'] = hyp['alpha'] * bht.Ra_L(...)**hyp['beta']
-
-            # res = hyp["coeff_h_back"]*bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
-            # print('res',res)
-
-            # if h1 == None:
-            #     print('res = None in h_back()')
-            #     print('L_c',L_c)
-            #     print('T_abs',var["T_abs_mean"])
-            #     print('theta',hyp["theta"])
-            #     print('T_back',stepConditions["T_back"])
-            #     print('h_back_calculated',res)
-            # else:
-
-            #     T_back_changed = hyp["T_back_changed"]
-            #     if T_back_changed > 0:
-            #         T_back_changed += 273.15
-            #         h2 = hyp["coeff_h_back"]*bht.back_h_mixed(T_ref,T_back_changed,stepConditions["u_back"],hyp["theta"],L_c)
-            #         h1 = (h2*T_back_changed)/stepConditions["T_back"]
-            #     else:
-            #         pass                          
-
-            #     var["h_back"] = h1
-
-def h_top_mean(componentSpecs,stepConditions,var,hyp):
-    
-    old_h_top = var["h_top_g"]
-    h_top(componentSpecs,stepConditions,var,hyp)
-
-    new_h_top = var["h_top_g"]
-
-    var["h_top_g"] = (old_h_top+new_h_top)/2
-
-def h_back_mean(componentSpecs,stepConditions,var,hyp):
-
-    old_h_back = var["h_back"]
-    h_back(componentSpecs,stepConditions,var,hyp)
-
-    new_h_back = var["h_back"]
-
-    var["h_back"] = (old_h_back+new_h_back)/2
-
-
-
-def h_back_tube(componentSpecs,stepConditions,var,hyp):
-    """Calculates the back heat transfer coefficient for the tube and stores it in var["h_back_tube"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the PVT parameters
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-        
-    Returns:
-        None"""
-
-    # Cas où le tuyau est bien lié à l'absorbeur (conductif)
-    if componentSpecs["l_c"] > 0. :
-        var["h_back_tube"] = var["h_back"]
-
-    # Cas où le tuyau est décollé de l'échangeur (radiatif seul)
-    # Alors on calcule dans tous les cas comme si c'était unn tube cylindrique
-    else:
-
-        L_c = componentSpecs['H_tube']
-
-        if componentSpecs["insulated"] == 1 and stepConditions["compt"] >= 1:
-
-            T_ref = var["T_ins_tube_mean"]
-
-        else:
-            T_ref = var["T_tube_mean"]
-
-        # if componentSpecs["tube_geometry"]=="rectangular" or componentSpecs["tube_geometry"]=="square":
-        #     res = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
-        # else:
-        res = bht.back_h_cylinder(T_ref,stepConditions["T_back"],L_c)
-
-        if componentSpecs["is_inlet_man"] == 1 and hyp["inlet_manifold_in_wind"] == 1:
-            T_film = (var["T_tube_mean"]+stepConditions["T_amb"])/2
-            D = componentSpecs["D_tube"]+componentSpecs["lambd_riser_back"]
-            nu = bht.air_nu(T_film)
-            Re = (stepConditions["u"]*D)/nu
-            Pr = bht.air_Pr()
-            k = bht.air_k(T_film)
-            Nu_forced = ht.conv_external.Nu_external_cylinder(Re,Pr)
-            h_forced = Nu_forced*(k/D)
-        else:
-            h_forced = 0.
-                
-        var["h_back_tube"] = (res**3 + h_forced**3)**(1/3)
-
-def h_back_fins(componentSpecs,stepConditions,var,hyp):
-    """Calculates the back heat transfer coefficient for the fins and stores it in var["h_back_fins"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the PVT parameters
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-        
-    Returns:
-        None"""
-
-
-
-    if hyp["h_back_fins_calc"] == "tube":
-        var["h_back_fins"] = var["h_back_tube"]
-    elif hyp["h_back_fins_calc"] == "abs":
-        var["h_back_fins"] = var["h_back"]
-    elif hyp["h_back_fins_calc"] == "TS":
-        L_c = componentSpecs["L_fin"]
-        D = componentSpecs["D"]
-        h_free = hyp["coeff_h_back_fins_free"]*bht.back_h_fins(var["T_tube_mean"],stepConditions["T_back"],hyp["theta"],L_c,D,componentSpecs["Heta"])
-        # h_free = 0.
-        h_forced = hyp["coeff_h_back_fins_forced"]*bht.ht_fins_forced_wiki(componentSpecs["L_fin"],componentSpecs["D"],stepConditions["u_back"]+0.9*stepConditions["u"])
-        var["h_back_fins"] = (h_free**3 + h_forced**3)**(1/3) + hyp["offset_h_back_fins"]
-    else:
-        pass
-
-def h_rad_back_tube(componentSpecs,stepConditions,var,hyp):
-    """Calculates the radiation heat transfer coefficient between the tube and the ambient air and stores it in var["h_rad_back_tube"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the PVT parameters
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-        
-    Returns:
-        None
-    """
-
-    sigma = hyp["sigma"]
-    T_back_rad = stepConditions["T_back"] # hypothèse T_amb = T_back   
-    if componentSpecs["insulated"] == 1 and stepConditions["compt"] >= 1:
-        T_ref = var["T_ins_tube_mean"]
-        eps = componentSpecs["eps_ins"]
-    else: 
-        T_ref = var["T_tube_mean"]
-        eps = componentSpecs["eps_hx_back"]
-
-    h = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
-    var["h_rad_back_tube"]=h
-
-
-def h_rad_back(componentSpecs,stepConditions,var,hyp):
-    """Calculates the radiation heat transfer coefficient between the absorber and the ambient air and stores it in var["h_rad_back"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the PVT parameters
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-        
-    Returns:
-        None
-    """
-
-    sigma = hyp["sigma"]
-    T_back_rad = stepConditions["T_back"] # hypothèse T_amb = T_back   
-    if componentSpecs["insulated"] == 1:
-        T_ref = var["T_ins_mean"]
-        eps = componentSpecs["eps_ins"]
-    else: 
-        T_ref = var["T_abs_mean"]
-        eps = componentSpecs["eps_hx_back"]
-   
-    T_back_rad_changed = hyp["T_back_rad_changed"]
-
-    if T_back_rad_changed > 0:
-        T_back_rad_changed += 273.15
-        sigma = hyp["sigma"]
-
-        h2 = eps*sigma*(T_ref+T_back_rad_changed)*(T_ref**2+T_back_rad_changed**2)
-        h1 = (h2*T_back_rad_changed)/T_back_rad
-    else:
-        h1 = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
-
-    var["h_rad_back"]=h1
-
 def a0(componentSpecs,stepConditions,var):
     """Calculates the a0 factor and stores it in var["a0"]
     
-    $$a_0 = \frac{1}{h_{top}+h_{rad}+1/R_g}\left(\alpha_gG+h_{top}T_{amb}+h_{rad}T_{sky}\right)$$
+    $$a_0 = \frac{1}{h_{top}+h_{rad}+1/R_g}\left(\alpha_g G + h_{top} T_{amb} + h_{rad} T_{sky}\right)$$
 
     Args:
         componentSpecs (dict): dictionary containing the PVT parameters
@@ -456,7 +57,7 @@ def a1(componentSpecs,stepConditions,var):
 def a3(componentSpecs,stepConditions,var):
     """Calculates the a3 factor and stores it in var["a3"]
     
-    $$a_3 = \left(h_{top}+h_{rad}\right)a_1$$
+    $$a_3 = (1-a_1) \frac{1}{R_g}$$
     
     Args:
         componentSpecs (dict): dictionary containing the PVT parameters
@@ -471,44 +72,34 @@ def a3(componentSpecs,stepConditions,var):
     var["a3"] = (1-a1)*(1/componentSpecs["R_g"])
 
 def a2(componentSpecs,stepConditions,var):
-    var["a2"] = - var["a0"]/componentSpecs["R_g"]
-
-def S_star(componentSpecs,stepConditions,var):
-    var["S_star"] = var["S"] - var["a2"] + var["h_rad"]*stepConditions["T_sky"]
-
-def h_rad_f(componentSpecs,stepConditions,var,hyp):
-    """Calculates the radiation heat transfer coefficient between the tube and the absorber and stores it in var["h_rad_f"]
+    """Calculates the a2 factor and stores it in var["a2"]
     
-    $$h_{rad,f} = \epsilon_{hx} \sigma (T_{tube}+T_{abs})(T_{tube}^2+T_{abs}^2)$$
+    $$a_2 = -\frac{a_0}{R_g}$$
     
     Args:
         componentSpecs (dict): dictionary containing the PVT parameters
         stepConditions (dict): dictionary containing the meteo inputs
         var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-    
     Returns:
         None
     """
-    # var["h_rad_f"] = hyp["h_rad_f"]
 
-    if componentSpecs["l_c"] > 0. :
-        h=0.
+    var["a2"] = - var["a0"]/componentSpecs["R_g"]
 
-    else:
+def S_star(componentSpecs,stepConditions,var):
+    """Calculates the $S^{*}$ factor and stores it in var["S_star"]
+    
+    $$S^{*} = S - a_2 + h_{rad}T_{sky}$$
 
-        sigma = hyp["sigma"]
+    Args:
+        componentSpecs (dict): dictionary containing the PVT parameters
+        stepConditions (dict): dictionary containing the meteo inputs
+        var (dict): dictionary containing the variables
+    Returns:
+        None
+    """
 
-        T_ref = var["T_tube_mean"]
-        T_B = var["T_Base_mean"]
-
-        eps = componentSpecs["eps_hx_top"]
-
-        h = eps*sigma*(T_ref+T_B)*(T_ref**2+T_B**2)
-
-    var["h_rad_f"] = hyp["coeff_h_rad_f"]*h
-
-# Pour les ailettes, on ne prend pas en compte la composante radiative h_rad_back
+    var["S_star"] = var["S"] - var["a2"] + var["h_rad"]*stepConditions["T_sky"]
 
 def Biot(lambd,k,h,delta):
     """Calculates the Biot number
@@ -527,73 +118,6 @@ def Bi_f3(componentSpecs,var):
     h_back = var["h_back_fins"]
     var["Bi_f3"] = Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],h_back,componentSpecs["delta_f3"])
 
-def h_rad(componentSpecs,stepConditions,var,hyp):
-    """Calculates the radiation heat transfer coefficient and stores it in var["h_rad"]
-    
-    $$
-    h_{rad} = \epsilon \sigma (T_{PV}+T_{sky})(T_{PV}^2+T_{sky}^2)
-    $$
-
-    Args:
-        componentSpecs (dict): dictionary containing the PVT parameters
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-        
-    Returns:
-        None"""
-    
-    eps = componentSpecs["eps_PV"]
-    sigma = hyp["sigma"]
-    T_sky = stepConditions["T_sky"]
-
-    T_PV = var["T_PV"]
-
-    tau_g_IR = componentSpecs["tau_g_IR"]
-
-    h = tau_g_IR*eps*sigma*(T_PV+T_sky)*(T_PV**2+T_sky**2)
-    var["h_rad"]=h
-    #var["h_rad"]=0.00001
-
-def h_rad_g(componentSpecs,stepConditions,var,hyp):
-    """Calculates the radiative heat transfer coefficient between the glass and the sky and stores it in var["h_rad_g"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the parameters of the PVT panel
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-    
-    Returns:
-        None"""
-    
-    var["h_rad_g"] = bht.h_rad(componentSpecs["eps_g"],var["T_glass"],stepConditions["T_sky"])
-
-def h_rad_tube_sky(componentSpecs,stepConditions,var,hyp):
-    """Calculates the radiative heat transfer coefficient between the tube and the sky and stores it in var["h_rad_tube_sky"]
-    
-    Args:
-        componentSpecs (dict): dictionary containing the parameters of the PVT panel
-        stepConditions (dict): dictionary containing the meteo inputs
-        var (dict): dictionary containing the variables
-        hyp (dict): dictionary containing the hypotheses
-    
-    Returns:
-        None
-    """
-    eps = componentSpecs["eps_hx_top"]
-    sigma = hyp["sigma"]
-    T_sky = stepConditions["T_sky"]
-
-    T_tube = var["T_tube_mean"]
-
-    tau_g_IR = componentSpecs["tau_g_IR"]
-
-    h = tau_g_IR * eps*sigma*(T_tube+T_sky)*(T_tube**2+T_sky**2)
-
-    var["h_rad_tube_sky"]=h
-
-# Depends on T_PV
 def X_celltemp(componentSpecs,var):
     """Calculates the X_celltemp factor and stores it in var["X_celltemp"]
     
@@ -608,7 +132,6 @@ def X_celltemp(componentSpecs,var):
     """
     Eff_T = componentSpecs["Eff_T"]
     T_ref = componentSpecs["T_ref"]
-
 
     T_PV = var["T_PV"]
 
@@ -636,16 +159,13 @@ def eta_PV(componentSpecs,stepConditions,var):
     X_rad = componentSpecs["X_rad"]
     X_corr = componentSpecs["X_corr"]
 
-    #T_PV = var["T_PV"]
     X_celltemp = var["X_celltemp"]
 
     eta = eta_nom*X_celltemp*X_rad*X_corr
     var["eta_PV"] = eta
-    #var["eta_PV"] = 0.15
 
-# net absorbed solar radiation (total absorbed - PV power production)
 def S(componentSpecs,stepConditions,var):
-    """Calculates the net absorbed solar radiation and stores it in var["S"]
+    """Calculates the net absorbed solar radiation (total absorbed - PV power production) and stores it in var["S"]
     
     $$
     S = \tau_{\theta}G(1-\eta_{PV})
@@ -672,9 +192,7 @@ def S(componentSpecs,stepConditions,var):
 def Fp(componentSpecs, var):
     """Calculates the Fp factor and stores it in var["Fp"]
     
-    $$
-    F_p = \frac{1}{h_{rad}R_{inter}+R_{inter}/R_t+1}
-    $$
+    $$F_p = \frac{1}{a_3 R_{inter}+h_{rad}R_{inter}+1}$$
     
     Args:
         componentSpecs (dict): dictionary containing the PVT parameters    
@@ -686,7 +204,6 @@ def Fp(componentSpecs, var):
 
     R_inter = componentSpecs["R_inter"]
 
-    #T_PV = var["T_PV"]
     h_rad = var["h_rad"]
     a3 = var["a3"]
 
@@ -804,10 +321,6 @@ def j(componentSpecs,var):
     h_rad_f = var["h_rad_f"]
 
     Fprime = var["Fp"]
-    
-    # j = 1/(R_inter*Fprime)+1/(R_b*Fprime)-1/R_inter+h_rad_f/Fprime
-
-    # j = 1/(R_inter*Fprime)+1/(R_b*Fprime)-1/R_inter
 
     j = 1/(Fprime*R_b) + 1/(R_inter*Fprime) - 1/R_inter
 
@@ -903,7 +416,7 @@ def qp_fin(componentSpecs, var):
 
     m = var["m"]
     
-    q = k_abs*lambd_abs*m*((b/j)-T_B)*tanh_or_inverse(m*L_af)
+    q = k_abs*lambd_abs*m*((b/j)-T_B)*math.tanh(m*L_af)
     var["qp_fin"] = q
 
 def e0(componentSpecs, var):
@@ -1312,7 +825,6 @@ def d4(componentSpecs, var):
 
     var["d4"] = -e4*(gamma + h_rad_f*p_ext_tube_rad)
 
-
 def KTE_Bt(componentSpecs,stepConditions,var):
     """Calculates Ka_Bt, Th_Bt, and Ep_Bt factors and stores them in var["Ka_Bt"], var["Th_Bt"], and var["Ep_Bt"]
     
@@ -1379,9 +891,9 @@ def KTE_Bt(componentSpecs,stepConditions,var):
     
     iota = componentSpecs["iota"]
 
-    # K = b2 * ( -D_tube*Fprime*((l_c/D_tube)*(h_rad+1/R_t)+(iota/D_tube)/(R_b*Fprime))-2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af) )
-    # T = b1 * ( D_tube*Fprime*((l_c/D_tube)*(h_rad+1/R_t)+(iota/D_tube)/(R_b*Fprime))+2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af))
-    # E = D_tube*Fprime*((l_c/D_tube)*(S+h_rad*T_sky+T_amb/R_t)+((iota/D_tube)*(1-b3)*T_back)/(R_b*Fprime))+2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*((b/j) - b3*T_back) + (l_c/R_t)*(Fprime-1)*b3*T_back
+    # K = b2 * ( -D_tube*Fprime*((l_c/D_tube)*(h_rad+1/R_t)+(iota/D_tube)/(R_b*Fprime))-2*k_abs*lambd_abs*m*math.tanh(m*L_af) )
+    # T = b1 * ( D_tube*Fprime*((l_c/D_tube)*(h_rad+1/R_t)+(iota/D_tube)/(R_b*Fprime))+2*k_abs*lambd_abs*m*math.tanh(m*L_af))
+    # E = D_tube*Fprime*((l_c/D_tube)*(S+h_rad*T_sky+T_amb/R_t)+((iota/D_tube)*(1-b3)*T_back)/(R_b*Fprime))+2*k_abs*lambd_abs*m*math.tanh(m*L_af)*((b/j) - b3*T_back) + (l_c/R_t)*(Fprime-1)*b3*T_back
 
     b1 = var["b1"]
     b2 = var["b2"]
@@ -1418,11 +930,11 @@ def KTE_Bt(componentSpecs,stepConditions,var):
     h1 = (-iota/R_b)*b1
 
     # 2q'_absfin
-    i5 = 2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*(b/j)
-    i4 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b4
-    i3 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b3
-    i2 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b2
-    i1 = -2*k_abs*lambd_abs*m*tanh_or_inverse(m*L_af)*b1
+    i5 = 2*k_abs*lambd_abs*m*math.tanh(m*L_af)*(b/j)
+    i4 = -2*k_abs*lambd_abs*m*math.tanh(m*L_af)*b4
+    i3 = -2*k_abs*lambd_abs*m*math.tanh(m*L_af)*b3
+    i2 = -2*k_abs*lambd_abs*m*math.tanh(m*L_af)*b2
+    i1 = -2*k_abs*lambd_abs*m*math.tanh(m*L_af)*b1
 
     K =  g2+h2+i2
     T = -(g1+h1+i1)
@@ -1528,7 +1040,6 @@ def Cp(componentSpecs,stepConditions,var,hyp):
     glycol_rate = hyp["glycol_rate"] # %
 
     var["Cp"] = PropsSI('C','P', p_fluid*100000, 'T', T_m, f'INCOMP::{fluid}[{glycol_rate}]')
-
 
 def ab_f(componentSpecs,stepConditions,var):
     """Calculates the a_f and b_f factors and stores them in var["a_f"] and var["b_f"]
@@ -1782,7 +1293,7 @@ def T_absfin_mean(componentSpecs,stepConditions,var):
 
     T_B_mean = var["T_Base_mean"]
 
-    var["T_absfin_mean"] = b/j + (T_B_mean-(b/j))*tanh_or_inverse(m*L_af)/(m*L_af)
+    var["T_absfin_mean"] = b/j + (T_B_mean-(b/j))*math.tanh(m*L_af)/(m*L_af)
 
 # Eq. 560.43 -> calculate the mean absorber temperature
 def T_abs_mean(componentSpecs,var):
@@ -1920,7 +1431,6 @@ def T_PV_absfin_mean(componentSpecs,var):
     T_PV_mean = var["T_PV"]
 
     var["T_PV_absfin_mean"] = (W*T_PV_mean - (W-2*L_af)*T_PV_Base_mean)/(2*L_af)
-
 
 def Qdot_sun_glass(componentSpecs,stepConditions,var):
 
@@ -2156,7 +1666,6 @@ def Qdot_tube_back_wo_ins_rad(componentSpecs,stepConditions,var):
 
     var["Qdot_tube_back_rad"] = L*gamma_back*(T_tube_m - T_back)
 
-
 def T_ins_tube_mean(componentSpecs,var):
     R_2 = componentSpecs["R_2"]
     T_tube_mean = var["T_tube_mean"]
@@ -2217,16 +1726,6 @@ def Qdot_ins_absfin_back_rad(componentSpecs,stepConditions,var):
 
     var["Qdot_ins_absfin_back_rad"] = L*2*L_af*h_back*(T_ins_absfin_m - T_back)
 
-
-# def T_ins_mean(componentSpecs,stepConditions,var):
-#     T_ref = var["T_abs_mean"]
-#     R_2 = componentSpecs["R_2"]
-#     h_back = var["h_back"] + var["h_rad_back"]
-#     T_back = stepConditions["T_back"]
-
-#     var["T_ins_mean"] = T_ref + (R_2/(R_2+1/h_back)) * (T_back - T_ref)
-
-
 def T_ins_mean(componentSpecs,var):
 
     T_ins_tube_mean = var["T_ins_tube_mean"]
@@ -2237,8 +1736,6 @@ def T_ins_mean(componentSpecs,var):
     W = componentSpecs["W"]
 
     var["T_ins_mean"] = (l_B*T_ins_tube_mean + 2*L_af*T_ins_absfin_mean)/W
-
-
 
 def Qdot_ins_conv(componentSpecs,stepConditions,var):
 
@@ -2369,7 +1866,6 @@ def Qdot_fluid_back(componentSpecs,stepConditions,var):
 
     var["Qdot_fluid_back"] = L*zeta*(T_fluid_m-T_back)
 
-
 def qp_f0(componentSpecs,stepConditions,var):
 
     T_fluid_m = var["T_fluid_mean"]
@@ -2378,7 +1874,6 @@ def qp_f0(componentSpecs,stepConditions,var):
     gamma_0_int = var["gamma_0_int"]
 
     var["qp_f0"] = gamma_0_int*(T_fluid_m-T_back)
-
 
 def qp_f1(componentSpecs,stepConditions,var):
 
@@ -2466,13 +1961,13 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     else:
         pass
     
-    h_rad_g(componentSpecs,stepConditions,var,hyp)
-    h_rad(componentSpecs,stepConditions,var,hyp)
+    mht.h_rad_g(componentSpecs,stepConditions,var,hyp)
+    mht.h_rad(componentSpecs,stepConditions,var,hyp)
 
     if componentSpecs["fin_0"] == 1 or componentSpecs["fin_1"] == 1 or componentSpecs["fin_2"] == 1:
-        h_top_mean(componentSpecs,stepConditions,var,hyp)
+        mht.h_top_mean(componentSpecs,stepConditions,var,hyp)
     else:
-        h_top(componentSpecs,stepConditions,var,hyp)
+        mht.h_top_g(componentSpecs,stepConditions,var,hyp)
 
     a0(componentSpecs,stepConditions,var)
     a1(componentSpecs,stepConditions,var)
@@ -2531,17 +2026,17 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     Qdot_ins_rad(componentSpecs,stepConditions,var)
 
     if hyp["calc_h_back_mean"]==1:
-        h_back_mean(componentSpecs,stepConditions,var,hyp)
+        mht.h_back_mean(componentSpecs,stepConditions,var,hyp)
     else:
-        h_back(componentSpecs,stepConditions,var,hyp)
+        mht.h_back(componentSpecs,stepConditions,var,hyp)
 
-    h_rad_back(componentSpecs,stepConditions,var,hyp)
-    h_back_tube(componentSpecs,stepConditions,var,hyp)
-    h_rad_tube_sky(componentSpecs,stepConditions,var,hyp)
-    h_rad_back_tube(componentSpecs,stepConditions,var,hyp)
-    h_back_fins(componentSpecs,stepConditions,var,hyp)
+    mht.h_rad_back(componentSpecs,stepConditions,var,hyp)
+    mht.h_back_tube(componentSpecs,stepConditions,var,hyp)
+    mht.h_rad_tube_sky(componentSpecs,stepConditions,var,hyp)
+    mht.h_rad_back_tube(componentSpecs,stepConditions,var,hyp)
+    mht.h_back_fins(componentSpecs,stepConditions,var,hyp)
 
-    h_rad_f(componentSpecs,stepConditions,var,hyp)
+    mht.h_rad_f(componentSpecs,stepConditions,var,hyp)
 
     T_PV_mean(componentSpecs,stepConditions,var)
     T_PV_Base_mean(componentSpecs,stepConditions,var)
@@ -2553,7 +2048,6 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     qp_fin(componentSpecs,var)
 
     Cp(componentSpecs,stepConditions,var,hyp)
-
 
 def compute_power(componentSpecs,stepConditions,var):
     Qdot_top_conv(componentSpecs,stepConditions,var)
@@ -2710,7 +2204,7 @@ def initialize_var(var,componentSpecs,stepConditions,hyp,i):
 
     var["T_tube_mean"] = (var["T_PV"]+var["T_fluid_in"])/2
     var["T_glass"] = var["T_PV"]
-    h_fluid(componentSpecs,stepConditions,var,hyp)
+    mht.h_fluid(componentSpecs,stepConditions,var,hyp)
 
     return var
 
@@ -2725,7 +2219,6 @@ def update_heat_transfer_coefficients(var, hyp, index):
 
 mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]
 add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
-
 
 def simu_one_steady_state(componentSpecs, stepConditions, hyp):
     """Procedure which calculates the variables for one steady state
@@ -3161,7 +2654,6 @@ def simu_condi_mpe_big(componentSpecs,stepConditions,steadyStateConditions_df,l,
 
     return df_res,X
 
-
 def change_T_sky(stepConditions,hyp,type):
     if type == "TUV":
         stepConditions["Gp"] = 4
@@ -3202,5 +2694,3 @@ def change_ins(componentSpecs,e_new,k_new):
 def change_N_fins_per_EP(componentSpecs,N):
     componentSpecs["N_fins_on_abs"] = (6*N)/componentSpecs["N_harp"]
     componentSpecs["D"] = (0.160/N)
-
-
