@@ -239,6 +239,8 @@ def h_back(componentSpecs,stepConditions,var,hyp):
                 var["h_back"] = bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
             elif hyp['method_h_back_hx'] == "mixed":
                 var["h_back"] = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
+            elif hyp['method_h_back_hx'] == 'parametric':
+                var['h_back'] = hyp['alpha'] * bht.Ra_L(...)**hyp['beta']
 
             # res = hyp["coeff_h_back"]*bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
             # print('res',res)
@@ -1315,7 +1317,6 @@ def KTE_Bt(componentSpecs,stepConditions,var):
     """Calculates Ka_Bt, Th_Bt, and Ep_Bt factors and stores them in var["Ka_Bt"], var["Th_Bt"], and var["Ep_Bt"]
     
     $$
-
     g_1 = (l_c/R_{inter})*(F'-1)*b_1
     g_2 = (l_c/R_{inter})*(F'-1)*b_2
     g_3 = (l_c/R_{inter})*(F'-1)*b_3
@@ -1336,8 +1337,7 @@ def KTE_Bt(componentSpecs,stepConditions,var):
 
     \kappa_{Bt} = g_2+h_2+i_2
     \theta_{Bt} = -(g_1+h_1+i_1)
-    \epsilon_{Bt} = (g_3+h_3+i_3)*T_{back} + (g_4+h_4+i_4)*T_{sky} + (g_5+h_5+i_5)
-    
+    \epsilon_{Bt} = (g_3+h_3+i_3)*T_{back} + (g_4+h_4+i_4)*T_{sky} + (g_5+h_5+i_5)  
     $$
     
     Args:
