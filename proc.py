@@ -526,6 +526,20 @@ def create_par():
 
     return par
 
+def write_stepConditions_from_steadyStateConditions(steadyStateConditions_df,i,hyp):
+
+    stepConditions = {'G':steadyStateConditions_df["G"][i],"T_amb":steadyStateConditions_df["T_amb"][i],"T_back":steadyStateConditions_df["T_amb"][i],"u":steadyStateConditions_df["u"][i], "u_back" : steadyStateConditions_df["u_back"][i], "T_fluid_in0":steadyStateConditions_df["T_fluid_in"][i]}
+    ty.change_T_sky(stepConditions,hyp,'TUV')  # calculate Gp and T_sky
+
+    stepConditions['T_back'] = stepConditions['T_amb']
+    stepConditions['T_back_rad'] = stepConditions['T_amb']
+
+    stepConditions["mdot"] = steadyStateConditions_df["mdot"][i]
+
+    stepConditions["guess_T_PV"] = (stepConditions["T_amb"]+stepConditions["T_fluid_in0"])/2
+
+    return stepConditions
+
 # Pre-processing and processing functions for parametric studies
 
 def pre_proc(test):

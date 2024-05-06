@@ -324,7 +324,6 @@ def h_top_forced_turbulent(T_s,T_amb,speed,longueur):
 
     return (1/longueur)*h_int
     
-
 def top_h_simple(T_s,T_amb,theta,longueur):
     
     h_back_mean = 2.
