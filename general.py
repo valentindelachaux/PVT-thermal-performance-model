@@ -124,10 +124,3 @@ class duct:
             Q1 = self.compute_heat_transfer(T_fluid_m,T_amb,self.h_ext)
 
         return Q1
-
-
-
-        
-
-
-
