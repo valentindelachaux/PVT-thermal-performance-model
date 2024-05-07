@@ -319,6 +319,13 @@ def create_out():
     wbo = opxl.Workbook()
     return pathout,wbo
 
+def find_cell_by_name(wb,nom_variable):
+    my_range = wb.defined_names[nom_variable]
+    ch = my_range.value
+    ch2 = ch.split("!")[1]
+    ch3 = ch2.replace("$","")
+    return ch3
+
 def create_par():
     par = {}
 
@@ -490,7 +497,7 @@ def create_par():
 
     for i in range(len(list_parameters)):
         nom_var = list_parameters[i]
-        cell = ty.find_cell_by_name(wbi,nom_var)
+        cell = find_cell_by_name(wbi,nom_var)
         valeur = sheet_i[cell].value
         
         par[nom_var]=valeur
@@ -518,6 +525,20 @@ def create_par():
     ty.h_fluid(par)
 
     return par
+
+def write_stepConditions_from_steadyStateConditions(steadyStateConditions_df,i,hyp):
+
+    stepConditions = {'G':steadyStateConditions_df["G"][i],"T_amb":steadyStateConditions_df["T_amb"][i],"T_back":steadyStateConditions_df["T_amb"][i],"u":steadyStateConditions_df["u"][i], "u_back" : steadyStateConditions_df["u_back"][i], "T_fluid_in0":steadyStateConditions_df["T_fluid_in"][i]}
+    ty.change_T_sky(stepConditions,hyp,'TUV')  # calculate Gp and T_sky
+
+    stepConditions['T_back'] = stepConditions['T_amb']
+    stepConditions['T_back_rad'] = stepConditions['T_amb']
+
+    stepConditions["mdot"] = steadyStateConditions_df["mdot"][i]
+
+    stepConditions["guess_T_PV"] = (stepConditions["T_amb"]+stepConditions["T_fluid_in0"])/2
+
+    return stepConditions
 
 # Pre-processing and processing functions for parametric studies
 
