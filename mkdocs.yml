@@ -55,7 +55,11 @@ nav:
   - "Home": index.md
   - "General": general.md
   - "Heat transfer": heat_transfer.md
+  - "Model heat transfer": model_ht.md
+  - "Model temperatures": model_temperatures.md
+  - "Model transfers": model_transfers.md
   - "Model": model.md
+  - "Model MPE": mpe_model.md
   - "Plot functions": plot_functions_here.md
   - "Proc": proc.md
 
