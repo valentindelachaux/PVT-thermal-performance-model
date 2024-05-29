@@ -12,7 +12,7 @@ from CoolProp.CoolProp import PropsSI
 
 import model_transfers as mtr
 
-mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_f","h_fluid","X_celltemp","eta_PV","S"]
+mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
 add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
 
 # Iteration solving functions
@@ -204,7 +204,7 @@ def j(componentSpecs,var):
     
     R_inter = componentSpecs["R_inter"]
     R_b = componentSpecs["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
     Fprime = var["Fp"]
 
@@ -265,11 +265,11 @@ def b(componentSpecs,stepConditions,var):
     S = var["S"]
     Fprime = var["Fp"]
 
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    # if h_rad_f != 0:
+    # if h_rad_tube_abs != 0:
     #     T_tube_mean = var["T_tube_mean"]
-    #     b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime) + (h_rad_f*T_tube_mean)/Fprime
+    #     b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime) + (h_rad_tube_abs*T_tube_mean)/Fprime
     # else:
     #     b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime)
 
@@ -307,7 +307,7 @@ def e0(componentSpecs, var):
     chi = 1/(h_fluid*p_int_tube)
  
 
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
     h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
     p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
@@ -321,7 +321,7 @@ def e0(componentSpecs, var):
     p_tube_sky = componentSpecs["p_tube_sky"]
 
     # vérifier l'homogénéité
-    var["e0"] = 1/chi + h_rad_f*p_ext_tube_rad + C_B + gamma + h_rad_tube_sky*p_tube_sky
+    var["e0"] = 1/chi + h_rad_tube_abs*p_ext_tube_rad + C_B + gamma + h_rad_tube_sky*p_tube_sky
 
 def e1(componentSpecs,var):
     """Calculates the e1 factor and stores it in var["e1"]
@@ -339,11 +339,11 @@ def e1(componentSpecs,var):
 
     C_B = componentSpecs["C_B"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
     e0 = var["e0"]
 
-    var["e1"] = (1/e0)*(C_B+p_ext_tube_rad*h_rad_f)
+    var["e1"] = (1/e0)*(C_B+p_ext_tube_rad*h_rad_tube_abs)
 
 def e2(componentSpecs,var):
     """Calculates the e2 factor and stores it in var["e2"]
@@ -429,7 +429,7 @@ def f0(componentSpecs,var):
     
     C_B = componentSpecs["C_B"]
 
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
 
     h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
@@ -444,7 +444,7 @@ def f0(componentSpecs,var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    var["f0"] = C_B + h_rad_f*p_ext_tube_rad + gamma + h_rad_tube_sky*p_tube_sky
+    var["f0"] = C_B + h_rad_tube_abs*p_ext_tube_rad + gamma + h_rad_tube_sky*p_tube_sky
 
 def b1(componentSpecs, var):
     """Calculates the b1 factor and stores it in var["b1"]
@@ -461,7 +461,7 @@ def b1(componentSpecs, var):
         None"""
 
     C_B = componentSpecs["C_B"]  
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
 
     e1 = var["e1"]
@@ -470,7 +470,7 @@ def b1(componentSpecs, var):
     # print('e1',e1)
     # print('gamma',gamma)
 
-    var["b1"] = 1/(C_B + h_rad_f*p_ext_tube_rad - f0*e1)
+    var["b1"] = 1/(C_B + h_rad_tube_abs*p_ext_tube_rad - f0*e1)
                    
 def b2(componentSpecs, var):
     """Calculates the b2 factor and stores it in var["b2"]
@@ -507,7 +507,7 @@ def b3(componentSpecs, var):
         None"""
 
     C_B = componentSpecs["C_B"]  
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
     h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
     p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
@@ -520,8 +520,8 @@ def b3(componentSpecs, var):
     e3 = var["e3"]
     f0 = var["f0"]
     # c'est vérifié c'est égal
-    # var["b3"] = (-1/(C_B + h_rad_f*p_ext_tube_rad))*gamma
-    # var["b3"] =  (-1/(C_B + h_rad_f*p_ext_tube_rad))*gamma
+    # var["b3"] = (-1/(C_B + h_rad_tube_abs*p_ext_tube_rad))*gamma
+    # var["b3"] =  (-1/(C_B + h_rad_tube_abs*p_ext_tube_rad))*gamma
 
     var["b3"] = (f0*e3 - gamma)*var["b1"]
 
@@ -548,7 +548,7 @@ def b4(componentSpecs, var):
     gamma_0_int = var["gamma_0_int"]
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
     h_rad_tube_sky = var["h_rad_tube_sky"]
     p_tube_sky = componentSpecs["p_tube_sky"]
@@ -586,12 +586,12 @@ def d1(componentSpecs, var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
     e1 = var["e1"]
 
-    # var["d1"] = (-gamma*d0)/R_B + h_rad_f*(1-(d0/R_B))
-    var["d1"] = -e1*(gamma+h_rad_f*p_ext_tube_rad) + h_rad_f*p_ext_tube_rad
+    # var["d1"] = (-gamma*d0)/R_B + h_rad_tube_abs*(1-(d0/R_B))
+    var["d1"] = -e1*(gamma+h_rad_tube_abs*p_ext_tube_rad) + h_rad_tube_abs*p_ext_tube_rad
 
 def d2(componentSpecs, var):
     """Calculates the d2 factor and stores it in var["d2"]
@@ -621,13 +621,13 @@ def d2(componentSpecs, var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    # var["d2"] = (-gamma*d0)/chi - (h_rad_f*d0)/chi
+    # var["d2"] = (-gamma*d0)/chi - (h_rad_tube_abs*d0)/chi
 
     e2 = var["e2"]
 
-    var["d2"] = -e2*(gamma+h_rad_f*p_ext_tube_rad)
+    var["d2"] = -e2*(gamma+h_rad_tube_abs*p_ext_tube_rad)
 
 def d3(componentSpecs, var):
     """Calculates the d3 factor and stores it in var["d3"]
@@ -657,12 +657,12 @@ def d3(componentSpecs, var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    # var["d3"] = -gamma**2*d0 + gamma - (h_rad_f*d0)/(1/gamma)
+    # var["d3"] = -gamma**2*d0 + gamma - (h_rad_tube_abs*d0)/(1/gamma)
 
     e3 = var["e3"]
-    var["d3"] = -e3*(gamma+h_rad_f*p_ext_tube_rad) + gamma
+    var["d3"] = -e3*(gamma+h_rad_tube_abs*p_ext_tube_rad) + gamma
 
 def d4(componentSpecs, var):
     """Calculates the d4 factor and stores it in var["d4"]
@@ -684,13 +684,13 @@ def d4(componentSpecs, var):
     gamma_1_int = var["gamma_1_int"]
     gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    # var["d3"] = -gamma**2*d0 + gamma - (h_rad_f*d0)/(1/gamma)
+    # var["d3"] = -gamma**2*d0 + gamma - (h_rad_tube_abs*d0)/(1/gamma)
 
     e4 = var["e4"]
 
-    var["d4"] = -e4*(gamma + h_rad_f*p_ext_tube_rad)
+    var["d4"] = -e4*(gamma + h_rad_tube_abs*p_ext_tube_rad)
 
 def KTE_Bt(componentSpecs,stepConditions,var):
     """Calculates Ka_Bt, Th_Bt, and Ep_Bt factors and stores them in var["Ka_Bt"], var["Th_Bt"], and var["Ep_Bt"]
@@ -852,9 +852,9 @@ def KTE_tf(componentSpecs,stepConditions,var):
 
     C_B = componentSpecs["C_B"]
     p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    R_B = 1/(C_B+p_ext_tube_rad*h_rad_f)
+    R_B = 1/(C_B+p_ext_tube_rad*h_rad_tube_abs)
     p_int_tube = componentSpecs["p_int_tube"]
     h_fluid = var["h_fluid"]
     chi = 1/(h_fluid*p_int_tube)
@@ -1190,7 +1190,7 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     mht.h_rad_back_tube(componentSpecs,stepConditions,var,hyp)
     mht.h_back_fins(componentSpecs,stepConditions,var,hyp)
 
-    mht.h_rad_f(componentSpecs,stepConditions,var,hyp)
+    mht.h_rad_tube_abs(componentSpecs,stepConditions,var,hyp)
 
     mtemp.T_PV_mean(componentSpecs,stepConditions,var)
     mtemp.T_PV_Base_mean(componentSpecs,stepConditions,var)
@@ -1259,7 +1259,7 @@ def initialize_var(var,componentSpecs,stepConditions,hyp,i):
     var = {'Slice' : i,
            'T_PV0':0,
            'Cp': hyp['Cp0'],
-            'h_rad_f':hyp['h_rad_f0'],
+            'h_rad_tube_abs':hyp['h_rad_tube_abs0'],
             }
     
     if i==0:
@@ -1368,7 +1368,7 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
 
     return slices_df, df_one, its_data_list
 
-def simu_one_steady_state_all_he(componentSpecs,stepConditions,hyp):
+def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp):
     
     res = {}
 
@@ -1376,18 +1376,20 @@ def simu_one_steady_state_all_he(componentSpecs,stepConditions,hyp):
 
     # Test the main part
 
-    slices_df, df_one, its_data_list = simu_one_steady_state(componentSpecs['main'],stepConditions,hyp)
+    panelSpecs['main']['name'] = 'part1'
+    slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs['main'],stepConditions,hyp)
     res['main'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
     hyp['h_back_prev'] = df_one['h_back'].values[0] # h_back de l'absorbeur
     hyp['h_top_man'] = df_one["h_top_g"].values[0]
 
-    if len(componentSpecs['decomp'])>1:
+    if len(panelSpecs['decomp'])>1:
         decomp = 1
 
-        for part,part_name in list(componentSpecs['decomp'].items())[1:]:
+        for part,part_name in list(panelSpecs['decomp'].items())[1:]:
 
-            slices_df, df_one, its_data_list = simu_one_steady_state(componentSpecs[part],stepConditions,hyp)
+            panelSpecs[part]['name'] = part
+            slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs[part],stepConditions,hyp)
             res[part] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
             stepConditions["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
@@ -1404,7 +1406,7 @@ def simu_one_steady_state_all_he(componentSpecs,stepConditions,hyp):
             df_one[measure] = [save_T_fluid_in0]
         elif measure == "T_fluid_out":
             if decomp == 1:
-                last_past = list(componentSpecs['decomp'].keys())[-1]
+                last_past = list(panelSpecs['decomp'].keys())[-1]
                 df_one[measure] = [res[last_past]['df_one']['T_fluid_out'].values[0]]
             else:
                 df_one[measure] = [res['main']['df_one']['T_fluid_out'].values[0]]
@@ -1415,7 +1417,7 @@ def simu_one_steady_state_all_he(componentSpecs,stepConditions,hyp):
                 for part in res.keys():
                     if part == 'main':
                         continue
-                    Aire = componentSpecs[part]["N_harp"]*componentSpecs[part]["W"]*componentSpecs[part]["L_tube"]
+                    Aire = panelSpecs[part]["N_harp"]*panelSpecs[part]["W"]*panelSpecs[part]["L_tube"]
                     Aire_tot += Aire
                     av += res[part]['df_one'][measure].values[0]*Aire
                 df_one[measure] = [av/Aire_tot]
@@ -1431,9 +1433,10 @@ def simu_one_steady_state_all_he(componentSpecs,stepConditions,hyp):
                 df_one[measure] = [sum]
             else:
                 df_one[measure] = [res['main']['df_one'][measure].values[0]]
+    
     return df_one,res
 
-def simu_steadyStateConditions(componentSpecs,hyp,steadyStateConditions_df):
+def simu_steadyStateConditions(panelSpecs,hyp,steadyStateConditions_df):
     
     # Dataframe object pour la liste des résultats sur tous les points de fonctionnement
     df_res = pd.DataFrame()
@@ -1454,7 +1457,7 @@ def simu_steadyStateConditions(componentSpecs,hyp,steadyStateConditions_df):
         # stepConditions["guess_T_PV"] = stepConditions["T_amb"] - 25
         stepConditions["guess_T_PV"] = (stepConditions["T_amb"]+stepConditions["T_fluid_in0"])/2
 
-        df_one,res = simu_one_steady_state_all_he(componentSpecs,stepConditions,hyp)
+        df_one,res = simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp)
 
         df_res = pd.concat([df_res,df_one],ignore_index=True)
         list_res.append(res)
@@ -1495,7 +1498,7 @@ def simu_steadyStateConditions(componentSpecs,hyp,steadyStateConditions_df):
     # df_res['mdot'] = df_res['density(T)']*(stepConditions["mdot"]/1000)
 
     df_res['Qdot'] = df_res['mdot']*df_res['Cp(T)']*df_res['DT']
-    df_res['Qdot / AG'] = df_res['Qdot']/(componentSpecs['AG'])
+    df_res['Qdot / AG'] = df_res['Qdot']/(panelSpecs['AG'])
 
     matrice = tab.to_numpy()
     B = df_res['Qdot / AG'].to_numpy()
@@ -1541,6 +1544,33 @@ def recap_energy_balances(df_one):
         balances_perc_of_average[key] = balances[key]/ht_average
 
     return balances, balances_perc_of_average
+
+def recap_residuals(panelSpecs, df_one, res):
+
+    # Initialize a dictionary to store the residuals
+    residuals = {'Part': [], 'glass': [], 'PV': [], 'Base': [], 'absfin': [], 'tube': []}
+
+    # Loop through the parts and calculate balances
+    for part in panelSpecs['decomp'].keys():
+        bal, bal_perc = recap_energy_balances(res[part]['df_one'])
+        residuals['Part'].append(part)
+        for key, value in bal_perc.items():
+            residuals[key].append(value[0])
+
+    # Calculate total balances
+    bal, bal_perc = recap_energy_balances(df_one)
+    residuals['Part'].append('Total')
+    for key, value in bal_perc.items():
+        residuals[key].append(value[0])
+
+    # Create DataFrame
+    df_residuals = pd.DataFrame(residuals)
+
+    pd.set_option('display.float_format', lambda x: f'{x:.2e}')
+    print(df_residuals)
+    pd.reset_option(pat='display.float_format')
+
+    return df_residuals
 
 # Other functions
 

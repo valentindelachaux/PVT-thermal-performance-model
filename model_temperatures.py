@@ -95,7 +95,7 @@ def T_Base_mean(componentSpecs, stepConditions,var): #T_fluid has already been u
     # gamma_1_int = var["gamma_1_int"]
     # gamma = gamma_back + gamma_0_int + gamma_1_int
 
-    # h_rad_f = var["h_rad_f"]
+    # h_rad_tube_abs = var["h_rad_tube_abs"]
 
     # e0 = var["e0"]
     T_fluid = var["T_fluid_mean"]
@@ -103,7 +103,7 @@ def T_Base_mean(componentSpecs, stepConditions,var): #T_fluid has already been u
     T_back = stepConditions["T_back"]
     T_sky = stepConditions["T_sky"]
 
-    # res = (1/(C_B+h_rad_f))*(e0*q_tube_fluid - (1/chi)*T_fluid - gamma*T_back)
+    # res = (1/(C_B+h_rad_tube_abs))*(e0*q_tube_fluid - (1/chi)*T_fluid - gamma*T_back)
     # var["T_Base_mean"] = res
 
     # res = (1/(h_fluid*p_int_tube)+1/C_B)*q_tube_fluid + T_f_mean
