@@ -244,9 +244,9 @@ def Qdot_absfin_tube(componentSpecs,stepConditions,var):
     L = componentSpecs["L_tube"]
 
     p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    var["Qdot_absfin_tube"] = L*p_ext_tube_rad*h_rad_f*(T_absfin_m-T_tube_m)
+    var["Qdot_absfin_tube"] = L*p_ext_tube_rad*h_rad_tube_abs*(T_absfin_m-T_tube_m)
 
 def Qdot_tube_back(componentSpecs,stepConditions,var):
 
@@ -396,10 +396,10 @@ def Qdot_Base_tube(componentSpecs,var):
     L = componentSpecs["L_tube"]
 
     p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    h_rad_f = var["h_rad_f"]
+    h_rad_tube_abs = var["h_rad_tube_abs"]
 
 
-    var["Qdot_Base_tube"] = L*(T_Base_m-T_tube_m)*(C_B+h_rad_f*p_ext_tube_rad)
+    var["Qdot_Base_tube"] = L*(T_Base_m-T_tube_m)*(C_B+h_rad_tube_abs*p_ext_tube_rad)
 
 def Qdot_Base_back(componentSpecs,stepConditions,var):
 
