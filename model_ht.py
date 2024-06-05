@@ -215,7 +215,7 @@ def h_back_abs(componentSpecs,stepConditions,var,hyp):
     Returns:
         None"""
     
-    if hyp['method_h_back_hx'] == 'CFD':
+    if hyp['method_h_back_abs'] == 'CFD':
         get_CFD_value(componentSpecs, stepConditions, var, hyp, 'h_back', 'phi_abs', 'T_abs_mean', 'T_amb')
         return
 
@@ -289,11 +289,11 @@ def h_back_abs(componentSpecs,stepConditions,var,hyp):
             else:
                 T_ref = var["T_abs_mean"]
 
-            if hyp['method_h_back_hx'] == "free_with_coeff": 
+            if hyp['method_h_back_abs'] == "free_with_coeff": 
                 var["h_back"] = hyp["coeff_h_back"]*bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
-            elif hyp['method_h_back_hx'] == "free":
+            elif hyp['method_h_back_abs'] == "free":
                 var["h_back"] = bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
-            elif hyp['method_h_back_hx'] == "mixed":
+            elif hyp['method_h_back_abs'] == "mixed":
                 var["h_back"] = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
 
 def h_back_mean(componentSpecs,stepConditions,var,hyp):

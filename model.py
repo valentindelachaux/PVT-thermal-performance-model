@@ -1368,7 +1368,7 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
 
     return slices_df, df_one, its_data_list
 
-def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp):
+def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly = 0):
     
     res = {}
 
@@ -1389,6 +1389,10 @@ def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp):
         for part,part_name in list(panelSpecs['decomp'].items())[1:]:
 
             panelSpecs[part]['name'] = part
+
+            if method_anomaly== 1 and (panelSpecs[part]['is_anomaly'] == 1 or panelSpecs[part]['is_inlet_man'] == 1 or panelSpecs[part]['is_outlet_man'] == 1):
+                hyp['method_h_back_abs'] = 'free'
+                
             slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs[part],stepConditions,hyp)
             res[part] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
