@@ -1182,7 +1182,7 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     if hyp["calc_h_back_mean"]==1:
         mht.h_back_mean(componentSpecs,stepConditions,var,hyp)
     else:
-        mht.h_back(componentSpecs,stepConditions,var,hyp)
+        mht.h_back_abs(componentSpecs,stepConditions,var,hyp)
 
     mht.h_rad_back(componentSpecs,stepConditions,var,hyp)
     mht.h_back_tube(componentSpecs,stepConditions,var,hyp)

@@ -69,7 +69,7 @@ def h_fluid(componentSpecs,stepConditions,var,hyp):
 def get_CFD_value(componentSpecs, stepConditions, var, hyp, h, phi, T_1, T_2):
     big_it = hyp['big_it']
     CFD_ht = pd.read_csv(hyp['CFD_ht_path']+f'_{big_it}.csv',sep=';')
-    var[h] = CFD_ht.loc[CFD_ht['component'] == componentSpecs['name']][phi].values[0] / (var[T_1] - stepConditions[T_2])
+    var[h] = abs( CFD_ht.loc[CFD_ht['component'] == componentSpecs['name']][phi].values[0] / (var[T_1] - stepConditions[T_2]) )
 
 # EXTERNAL CONVECTIVE
 
@@ -179,8 +179,8 @@ def h_top_mean(componentSpecs,stepConditions,var,hyp):
 
     var["h_top_g"] = (old_h_top+new_h_top)/2
 
-def h_back(componentSpecs,stepConditions,var,hyp):
-    """Calculates the convective heat transfer coefficient between the back of the panel and the ambient air and stores it var["h_back"]
+def h_back_abs(componentSpecs,stepConditions,var,hyp):
+    """Calculates the convective heat transfer coefficient between the absorber and the ambient air and stores it var["h_back"]
 
     - If the component is an anomaly, the coefficient is the same as the one found when solving the 'main'
 
@@ -220,6 +220,10 @@ def h_back(componentSpecs,stepConditions,var,hyp):
         return
 
     # Anomaly
+    # If this part of the PVT is an anomaly in the sif this part of the PVT is an anomaly in the sense that the exchanger
+    # is detached from the PV over a short distance, the transfer coefficient at the absorber (which in this case is the PV backsheet)
+    # is taken as that calculated for the “main”.
+
     if  componentSpecs["is_anomaly"] == 1:
 
         if hyp['method_h_back_anomaly'] == "like_exchanger":
@@ -228,6 +232,9 @@ def h_back(componentSpecs,stepConditions,var,hyp):
             raise ValueError("Method for h_back is not well defined for anomalies")
 
     # Manifold
+    # If this part of the PVT is a manifold, the transfer coefficient at the absorber is taken as:
+    # - that calculated from the correlation for a free cylinder
+    # - or that for the “main”.
     elif componentSpecs["is_inlet_man"] == 1 or componentSpecs["is_outlet_man"] == 1 :
 
         L_c = componentSpecs['H_tube']
@@ -238,7 +245,6 @@ def h_back(componentSpecs,stepConditions,var,hyp):
             T_ref = var["T_abs_mean"]
 
         if hyp['method_h_back_manifold'] == "free_cylinder":
-
                 # res = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
             var["h_back"] = bht.back_h_cylinder(T_ref,stepConditions["T_back"],L_c)
 
@@ -260,7 +266,7 @@ def h_back(componentSpecs,stepConditions,var,hyp):
 
         # If error
         if var["T_abs_mean"]==None:
-            print('T_abs_mean = None in h_back()')
+            print('T_abs_mean = None in h_back_abs()')
             var["h_back"] = 0.5
         
         # Case with fins
@@ -303,7 +309,7 @@ def h_back_mean(componentSpecs,stepConditions,var,hyp):
     """
 
     old_h_back = var["h_back"]
-    h_back(componentSpecs,stepConditions,var,hyp)
+    h_back_abs(componentSpecs,stepConditions,var,hyp)
 
     new_h_back = var["h_back"]
 
@@ -349,9 +355,6 @@ def h_back_tube(componentSpecs,stepConditions,var,hyp):
         else:
             T_ref = var["T_tube_mean"]
 
-        # if componentSpecs["tube_geometry"]=="rectangular" or componentSpecs["tube_geometry"]=="square":
-        #     res = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
-        # else:
         res = bht.back_h_cylinder(T_ref,stepConditions["T_back"],L_c)
 
         if componentSpecs["is_inlet_man"] == 1 and hyp["inlet_manifold_in_wind"] == 1:
