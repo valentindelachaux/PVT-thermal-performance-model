@@ -69,10 +69,11 @@ def h_fluid(componentSpecs,stepConditions,var,hyp):
 def get_CFD_value(componentSpecs, stepConditions, var, hyp, h, phi, T_1, T_2):
     big_it = hyp['big_it']
     CFD_ht = pd.read_csv(hyp['CFD_ht_path']+f'_{big_it}.csv',sep=';')
-    var[h] = CFD_ht.loc[CFD_ht['component'] == componentSpecs['name']][phi].values[0] / (var[T_1] - stepConditions[T_2])
+    var[h] = abs( CFD_ht.loc[CFD_ht['component'] == componentSpecs['name']][phi].values[0] / (var[T_1] - stepConditions[T_2]) )
 
 # EXTERNAL CONVECTIVE
 
+# Convectif entre le verre et l'ambiant
 def h_top_g(componentSpecs,stepConditions,var,hyp):
     """Calculates the convective heat transfer coefficient between the top of the panel (glass) and the ambient air and stores it in var["h_top_g"]
     
@@ -160,6 +161,7 @@ def h_top_g(componentSpecs,stepConditions,var,hyp):
         else:
             raise ValueError("Method for h_top_g is not well defined for exchanger")
 
+# Convectif entre le verre et l'ambiant lissé d'une itération à l'autre
 def h_top_mean(componentSpecs,stepConditions,var,hyp):
     """Calculates the mean h_top between the value at iteration n-1 and the value calculated at iteration n and stores it in var["h_top_g"]
     
@@ -179,8 +181,9 @@ def h_top_mean(componentSpecs,stepConditions,var,hyp):
 
     var["h_top_g"] = (old_h_top+new_h_top)/2
 
-def h_back(componentSpecs,stepConditions,var,hyp):
-    """Calculates the convective heat transfer coefficient between the back of the panel and the ambient air and stores it var["h_back"]
+# Convectif entre l'absorbeur et l'ambiant
+def h_back_abs(componentSpecs,stepConditions,var,hyp):
+    """Calculates the convective heat transfer coefficient between the absorber and the ambient air and stores it var["h_back"]
 
     - If the component is an anomaly, the coefficient is the same as the one found when solving the 'main'
 
@@ -215,11 +218,15 @@ def h_back(componentSpecs,stepConditions,var,hyp):
     Returns:
         None"""
     
-    if hyp['method_h_back_hx'] == 'CFD':
+    if hyp['method_h_back_abs'] == 'CFD':
         get_CFD_value(componentSpecs, stepConditions, var, hyp, 'h_back', 'phi_abs', 'T_abs_mean', 'T_amb')
         return
 
     # Anomaly
+    # If this part of the PVT is an anomaly in the sif this part of the PVT is an anomaly in the sense that the exchanger
+    # is detached from the PV over a short distance, the transfer coefficient at the absorber (which in this case is the PV backsheet)
+    # is taken as that calculated for the “main”.
+
     if  componentSpecs["is_anomaly"] == 1:
 
         if hyp['method_h_back_anomaly'] == "like_exchanger":
@@ -228,6 +235,9 @@ def h_back(componentSpecs,stepConditions,var,hyp):
             raise ValueError("Method for h_back is not well defined for anomalies")
 
     # Manifold
+    # If this part of the PVT is a manifold, the transfer coefficient at the absorber is taken as:
+    # - that calculated from the correlation for a free cylinder
+    # - or that for the “main”.
     elif componentSpecs["is_inlet_man"] == 1 or componentSpecs["is_outlet_man"] == 1 :
 
         L_c = componentSpecs['H_tube']
@@ -238,7 +248,6 @@ def h_back(componentSpecs,stepConditions,var,hyp):
             T_ref = var["T_abs_mean"]
 
         if hyp['method_h_back_manifold'] == "free_cylinder":
-
                 # res = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
             var["h_back"] = bht.back_h_cylinder(T_ref,stepConditions["T_back"],L_c)
 
@@ -260,7 +269,7 @@ def h_back(componentSpecs,stepConditions,var,hyp):
 
         # If error
         if var["T_abs_mean"]==None:
-            print('T_abs_mean = None in h_back()')
+            print('T_abs_mean = None in h_back_abs()')
             var["h_back"] = 0.5
         
         # Case with fins
@@ -283,13 +292,14 @@ def h_back(componentSpecs,stepConditions,var,hyp):
             else:
                 T_ref = var["T_abs_mean"]
 
-            if hyp['method_h_back_hx'] == "free_with_coeff": 
+            if hyp['method_h_back_abs'] == "free_with_coeff": 
                 var["h_back"] = hyp["coeff_h_back"]*bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
-            elif hyp['method_h_back_hx'] == "free":
+            elif hyp['method_h_back_abs'] == "free":
                 var["h_back"] = bht.back_h_simple(T_ref,stepConditions["T_back"],hyp["theta"],L_c)
-            elif hyp['method_h_back_hx'] == "mixed":
+            elif hyp['method_h_back_abs'] == "mixed":
                 var["h_back"] = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
 
+# Convectif entre l'absorbeur et l'ambiant lissé d'une itération à l'autre
 def h_back_mean(componentSpecs,stepConditions,var,hyp):
     """Calculates the mean h_back between the value at iteration n-1 and the value calculated at iteration n and stores it in var["h_back"]
     
@@ -303,12 +313,13 @@ def h_back_mean(componentSpecs,stepConditions,var,hyp):
     """
 
     old_h_back = var["h_back"]
-    h_back(componentSpecs,stepConditions,var,hyp)
+    h_back_abs(componentSpecs,stepConditions,var,hyp)
 
     new_h_back = var["h_back"]
 
     var["h_back"] = (old_h_back+new_h_back)/2
 
+# Convectif entre le tube et l'ambiant
 def h_back_tube(componentSpecs,stepConditions,var,hyp):
     """Calculates the back heat transfer coefficient for the tube and stores it in var["h_back_tube"]
 
@@ -349,9 +360,6 @@ def h_back_tube(componentSpecs,stepConditions,var,hyp):
         else:
             T_ref = var["T_tube_mean"]
 
-        # if componentSpecs["tube_geometry"]=="rectangular" or componentSpecs["tube_geometry"]=="square":
-        #     res = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
-        # else:
         res = bht.back_h_cylinder(T_ref,stepConditions["T_back"],L_c)
 
         if componentSpecs["is_inlet_man"] == 1 and hyp["inlet_manifold_in_wind"] == 1:
@@ -368,6 +376,7 @@ def h_back_tube(componentSpecs,stepConditions,var,hyp):
                 
         var["h_back_tube"] = (res**3 + h_forced**3)**(1/3)
 
+# Convectif entre les ailettes et l'ambiant
 def h_back_fins(componentSpecs,stepConditions,var,hyp):
     """Calculates the back heat transfer coefficient for the fins and stores it in var["h_back_fins"]
     
@@ -398,6 +407,7 @@ def h_back_fins(componentSpecs,stepConditions,var,hyp):
 
 # RADIATIVE
 
+# Radiatif entre le verre et le ciel
 def h_rad_g(componentSpecs,stepConditions,var,hyp):
     """Calculates the radiative heat transfer coefficient between the glass and the sky and stores it in var["h_rad_g"]
     
@@ -412,6 +422,7 @@ def h_rad_g(componentSpecs,stepConditions,var,hyp):
     
     var["h_rad_g"] = bht.h_rad(componentSpecs["eps_g"],var["T_glass"],stepConditions["T_sky"])
 
+# Radiatif entre le PV et le ciel
 def h_rad(componentSpecs,stepConditions,var,hyp):
     """Calculates the radiation heat transfer coefficient and stores it in var["h_rad"]
     
@@ -440,6 +451,7 @@ def h_rad(componentSpecs,stepConditions,var,hyp):
     var["h_rad"]=h
     #var["h_rad"]=0.00001
 
+# Radiatif entre le tube à l'arrière et l'ambiant (toit-terrasse / indoor)
 def h_rad_back_tube(componentSpecs,stepConditions,var,hyp):
     """Calculates the radiation heat transfer coefficient between the tube and the ambient air and stores it in var["h_rad_back_tube"]
     
@@ -454,7 +466,7 @@ def h_rad_back_tube(componentSpecs,stepConditions,var,hyp):
     """
 
     if hyp['method_h_rad_back_tube'] == 'CFD':
-        get_CFD_value(componentSpecs, stepConditions, var, hyp, 'h_rad_back_tube', 'phi_rad_back_tube', 'T_abs_mean', 'T_amb')
+        var["h_rad_back_tube"]=1e-10
         return
 
     sigma = hyp["sigma"]
@@ -469,6 +481,7 @@ def h_rad_back_tube(componentSpecs,stepConditions,var,hyp):
     h = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
     var["h_rad_back_tube"]=h
 
+# Radiatif entre l'absorbeur et l'ambiant (toit-terrasse / indoor)
 def h_rad_back(componentSpecs,stepConditions,var,hyp):
     """Calculates the radiation heat transfer coefficient between the absorber and the ambient air and stores it in var["h_rad_back"]
     
@@ -481,6 +494,10 @@ def h_rad_back(componentSpecs,stepConditions,var,hyp):
     Returns:
         None
     """
+
+    if hyp['method_h_back_abs'] == 'CFD':
+        var["h_rad_back"]=1e-10
+        return
 
     sigma = hyp["sigma"]
     T_back_rad = stepConditions["T_back"] # hypothèse T_amb = T_back   
@@ -504,6 +521,7 @@ def h_rad_back(componentSpecs,stepConditions,var,hyp):
 
     var["h_rad_back"]=h1
 
+# Radiatif entre le tube et l'absorbeur
 def h_rad_tube_abs(componentSpecs,stepConditions,var,hyp):
     """Calculates the radiation heat transfer coefficient between the tube and the absorber and stores it in var["h_rad_tube_abs"]
     
@@ -526,6 +544,9 @@ def h_rad_tube_abs(componentSpecs,stepConditions,var,hyp):
     if componentSpecs["l_c"] > 0. :
         h=0.
 
+    elif hyp['method_h_back_tube'] == 'CFD':
+        h=0.
+
     else:
 
         sigma = hyp["sigma"]
@@ -539,6 +560,7 @@ def h_rad_tube_abs(componentSpecs,stepConditions,var,hyp):
 
     var["h_rad_tube_abs"] = hyp["coeff_h_rad_tube_abs"]*h
 
+# Radiatif entre le tube et le ciel
 def h_rad_tube_sky(componentSpecs,stepConditions,var,hyp):
     """Calculates the radiative heat transfer coefficient between the tube and the sky and stores it in var["h_rad_tube_sky"]
     

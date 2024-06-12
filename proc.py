@@ -95,7 +95,7 @@ def C_B(par):
     l_c = par["l_c"]
     k_riser_plate = par["k_riser_plate"]
 
-    par["C_B"] = (l_c*k_riser_plate)/(lambd_riser_plate+1*1E-3)
+    par["C_B"] = (l_c*k_riser_plate)/(lambd_riser_plate+1*1E-3) + 1E-6
 
 def R_g(par):
     par["R_g"] = par["lambd_upper_glass"]/par["k_glass"]
@@ -109,6 +109,20 @@ def R_inter(par):
 def R_2(par):
     par["R_2"] = par['lambd_ins']/par['k_ins'] + 1*1E-12
 
+def top_area_tube_contact_PV(par):
+    if par['geometry'] == 'harp':
+        return (1 if par['l_c'] > 0 else 0)*par['L_tube']*par['W']*par['N_harp']
+    else:
+        raise ValueError('Geometry not implemented')
+    
+def top_area_PV(par):
+    return par['L_pan']*par['w_pan']
+
+def back_area_tube_conv_and_rad(par):
+    if par['geometry'] == 'harp':
+        return par['L_tube']*par['p_ext_tube']*par['N_harp']
+    else:
+        raise ValueError('Geometry not implemented')
 
 def create_dict_from_excel(path,sheet):
 
@@ -325,206 +339,6 @@ def find_cell_by_name(wb,nom_variable):
     ch2 = ch.split("!")[1]
     ch3 = ch2.replace("$","")
     return ch3
-
-def create_par():
-    par = {}
-
-    par["version"] = 1
-
-    ## Physics constants
-
-    par["sigma"] = 1 # Stefan-Boltzmann constant
-
-    ## PV
-
-    par["eta_nom"] = 1 # nominal efficiency of PV panel
-
-    par["Eff_T"] = 1
-    par["T_ref"] = 25 # reference temperature, often 25°C
-
-    par["Eff_G"] = 1
-    par["G_ref"] = 1000 # reference irradiance, often 1000 W/m2
-
-    #par["X_rad"] = 1
-    par["X_corr"] = 1 
-
-    ## Heat exchanger specs
-
-
-    par["L_pan"] = 1
-    par["w_pan"] = 1
-    par["L_abs"] = 1
-    par["w_abs"] = 1
-
-    par["W"] = 1 # the width (x-direction) between adjacent fluid tubes
-    par["D_tube"] = 1 #
-    par["p_int_tube"] = 1 #
-    par["p_ext_tube"] = 1 #
-    par["w_tube"] = 1
-    par["l_c"] = 1
-    par["l_B"] = 1
-    par["L_af"] = 1  
-    par["iota"] = 1
-    par["N_meander"] = 1
-    par["N_harp"] = 1 # number of identical tubes carrying fluid through the collector
-    par["N_harp_actual"] = 1 # actual numer of identical tubes in parallel (harp geometry)
-    par["L_tube"] = 1 # the length of the collector along the flow direction = L_tube in Excel
-
-    par["D"] = 1
-
-    par["insulated"] = 1
-
-    ## Additionnal fins = ailettes
-
-    par["ailette"] = 1
-
-    par["geometry"] = 1
-
-    par["fin_0"] = 1
-    par["N_f0"] = 1
-    par["L_f0"] = 1
-    par["delta_f0"] = 1
-
-    par["fin_1"] = 1
-    par["N_f1"] = 1
-    par["L_f1"] = 1
-    par["delta_f1"] = 1
-    par["delta_f1_int"] = 1
-    par["coeff_f1"] = 1
-
-    par["fin_2"] = 1
-    par["N_f2"] = 1
-    par["L_f2"] = 1
-    par["delta_f2"] = 1
-
-    par["fin_3"] = 1
-    par["N_f3"] = 1
-    par["L_f3"] = 1
-    par["delta_f3"] = 1
-
-    par["Heta"] = 1
-
-    par["N_ail"] = 1
-
-    ## Thermal / radiance
-
-    par["tau_alpha"] = 1 # transmittance-absorptance product for the solar collector
-    par["eps"] = 1 # emissivity of the top surface of the collector (PV surface)
-    par["eps_he"] = 1
-
-    # Geometry and thermal conductivities
-
-    par["lambd_glass"] = 1
-    par["k_glass"] = 1
-
-    par["k_air"] = 1
-    par["lambd_air"] = 1
-
-    par["k_abs"] = 1 # thermal conductivity of the plate material
-    par["lambd_abs"] = 1 # thickness of the absorber plate
-
-    par["lambd_riser_plate"] = 1
-    par["lambd_riser_back"] = 1
-    par["k_riser_plate"] = 1
-    par["k_riser_back"] = 1
-
-    par["k_ail"] = 1 # thermal conductivity of the fin
-    par["lambd_ail"] = 1 # thickness of the fin
-
-    par["k_ins"] = 1
-    par["lambd_ins"] = 1
-
-    par["coeff_h_top_free"] = 1
-    par["coeff_h_top_forced"] = 1
-    par["coeff_h_back"] = 1
-
-    par["h_rad_back"] = 1
-
-    par["h_rad_f"] = 1
-
-    # Ci-dessous les résistances du panneau sont calculées directement dans le fichier Inputs.xlsx
-
-    par["R_inter"] = 1 # instead of 1/h_outer in the document
-    par["R_inter"] = 1 # = R_1 = R_inter = resistance to heat transfer from the PV cells to the absorber plate
-    par["R_2"] = 1
-
-    par["C_B"] = 1 # the conductance between the absorber plate and the bonded tube
-
-    ## Initialisation d'une météo
-
-    par["G"] = 1 # total solar radiation (beam + diffuse) incident upon the collector surface = POA irradiance
-    par["Gp"] = 1 # infra-red 
-    par["coeff_G_p"] = 1
-    par["T_sky"] = 1 # sky temperature for long-wave radiation calculations
-    par["T_amb"] = 1 
-    par["T_back"] = 1
-    par["u"] = 1 # wind speed
-
-    ## Fluid
-
-    par["T_fluid_in0"] = 1
-    par["Cp"] = 1 # specific heat of the fluid flowing through the PV/T collector
-    par["mdot"] = 1 # flow rate of fluid through the solar collector
-
-    par["k_fluid"] = 1
-    par["rho_fluid"] = 1
-    par["mu_fluid"] = 1
-
-    ## Installation
-
-    par["theta"] = 1 # angle of incidence
-
-    par["orientation"] = 1
-
-    ## Type de test
-
-    par["test"] = 1
-
-    # Excel parameters
-
-    list_parameters = []
-    *list_parameters, = par
-
-    path = os.getcwd()
-    print(path)
-
-    inp = r'\Inputs.xlsm'
-    fichier_i = path+inp
-    wbi = opxl.load_workbook(fichier_i,data_only=True)
-    sheet_i = wbi["Main"]
-
-    # Find parameters in Excel file Inputs.xlsx
-
-    for i in range(len(list_parameters)):
-        nom_var = list_parameters[i]
-        cell = find_cell_by_name(wbi,nom_var)
-        valeur = sheet_i[cell].value
-        
-        par[nom_var]=valeur
-
-    wbi.close()
-
-    ### Computation of some parameters from inputs
-
-    # Calculate AG
-    par["AG"] = par["L_pan"]*par["w_pan"]
-
-    # Calculate delta : demi-intervalle entre deux risers (extérieur à extérieur)
-    # utilisé dans gamma_2_int et Q_abs_back
-
-    par["Dext_tube"] = par["D_tube"] + par["lambd_riser_back"]
-
-    par["delta"] = (par["W"]-par["Dext_tube"])/2
-    # Calculate X_rad which depends on G
-    ty.X_rad(par)
-
-    # Calculate the conductance between the absorber and the fluid through any riser
-    ty.C_B(par)
-
-    # Calculate h_fluid
-    ty.h_fluid(par)
-
-    return par
 
 def write_stepConditions_from_steadyStateConditions(steadyStateConditions_df,i,hyp):
 
