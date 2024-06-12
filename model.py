@@ -287,6 +287,23 @@ def b(componentSpecs,stepConditions,var):
 
     var["b"] = b
 
+def calc_gamma(componentSpecs, var):
+
+    h_back_tube = var["h_back_tube"]
+    h_rad_back_tube = var["h_rad_back_tube"]
+    p_ext_tube = componentSpecs["p_ext_tube"]
+    p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
+    R_2 = componentSpecs["R_2"]
+
+    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
+    gamma_rad_back = p_ext_tube_rad/(R_2+1/h_rad_back_tube)
+    gamma_0_int = var["gamma_0_int"]
+    gamma_1_int = var["gamma_1_int"]
+
+    gamma = gamma_back + gamma_rad_back + gamma_0_int + gamma_1_int
+
+    return gamma
+
 def e0(componentSpecs, var):
     """Calculates the e0 factor and stores it in var["e0"]
     
@@ -306,16 +323,10 @@ def e0(componentSpecs, var):
     C_B = componentSpecs["C_B"]   
     chi = 1/(h_fluid*p_int_tube)
  
+    gamma = calc_gamma(componentSpecs, var)
+    p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
 
     h_rad_tube_abs = var["h_rad_tube_abs"]
-
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
 
     h_rad_tube_sky = var["h_rad_tube_sky"]
     p_tube_sky = componentSpecs["p_tube_sky"]
@@ -381,13 +392,7 @@ def e3(componentSpecs,var):
     Returns:
         None"""
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
 
     e0 = var["e0"]
 
@@ -432,17 +437,10 @@ def f0(componentSpecs,var):
     h_rad_tube_abs = var["h_rad_tube_abs"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-
     h_rad_tube_sky = var["h_rad_tube_sky"]
     p_tube_sky = componentSpecs["p_tube_sky"]
 
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
 
     var["f0"] = C_B + h_rad_tube_abs*p_ext_tube_rad + gamma + h_rad_tube_sky*p_tube_sky
 
@@ -509,13 +507,7 @@ def b3(componentSpecs, var):
     C_B = componentSpecs["C_B"]  
     h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
 
     e3 = var["e3"]
     f0 = var["f0"]
@@ -541,13 +533,8 @@ def b4(componentSpecs, var):
     b1 = var["b1"]
     C_B = componentSpecs["C_B"]
     
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
+
     h_rad_tube_abs = var["h_rad_tube_abs"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
     h_rad_tube_sky = var["h_rad_tube_sky"]
@@ -578,15 +565,10 @@ def d1(componentSpecs, var):
     h_fluid = var["h_fluid"]
     chi = 1/(h_fluid*p_int_tube)
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
 
     h_rad_tube_abs = var["h_rad_tube_abs"]
+    p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
 
     e1 = var["e1"]
 
@@ -613,13 +595,8 @@ def d2(componentSpecs, var):
     h_fluid = var["h_fluid"]
     chi = 1/(h_fluid*p_int_tube)
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
+    p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
 
     h_rad_tube_abs = var["h_rad_tube_abs"]
 
@@ -649,13 +626,8 @@ def d3(componentSpecs, var):
     h_fluid = var["h_fluid"]
     chi = 1/(h_fluid*p_int_tube)
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
+    p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
 
     h_rad_tube_abs = var["h_rad_tube_abs"]
 
@@ -676,13 +648,8 @@ def d4(componentSpecs, var):
     Returns:
         None"""
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = calc_gamma(componentSpecs, var)
+    p_ext_tube_rad  = componentSpecs["p_ext_tube_rad"]
 
     h_rad_tube_abs = var["h_rad_tube_abs"]
 
@@ -858,13 +825,8 @@ def KTE_tf(componentSpecs,stepConditions,var):
     p_int_tube = componentSpecs["p_int_tube"]
     h_fluid = var["h_fluid"]
     chi = 1/(h_fluid*p_int_tube)
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+
+    gamma = calc_gamma(componentSpecs, var)
 
     T_sky = stepConditions["T_sky"]
     T_back = stepConditions["T_back"]
