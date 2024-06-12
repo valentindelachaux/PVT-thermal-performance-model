@@ -5,6 +5,7 @@ import numpy as np
 import heat_transfer as bht
 import ht
 
+import model as mod
 import model_ht as mht
 
 from CoolProp.CoolProp import PropsSI
@@ -254,15 +255,9 @@ def Qdot_tube_back(componentSpecs,stepConditions,var):
     T_back = stepConditions["T_back"]
     L = componentSpecs["L_tube"]
 
-    h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
-    gamma = gamma_back + gamma_0_int + gamma_1_int
+    gamma = mod.calc_gamma(componentSpecs,var)
 
-    var["Qdot_tube_back"] = L*gamma_back*(T_tube_m - T_back)
+    var["Qdot_tube_back"] = L*gamma*(T_tube_m - T_back)
 
 def Qdot_f01(componentSpecs,stepConditions,var):
 
