@@ -1333,7 +1333,7 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
 def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly = 0):
     
     res = {}
-
+    save_stepConditions = stepConditions.copy()
     save_T_fluid_in0 = stepConditions["T_fluid_in0"]
 
     # Test the main part
@@ -1400,6 +1400,8 @@ def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly =
             else:
                 df_one[measure] = [res['main']['df_one'][measure].values[0]]
     
+    stepConditions = save_stepConditions.copy()
+
     return df_one,res
 
 def simu_steadyStateConditions(panelSpecs,hyp,steadyStateConditions_df):
