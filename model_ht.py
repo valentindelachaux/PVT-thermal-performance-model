@@ -68,7 +68,7 @@ def h_fluid(componentSpecs,stepConditions,var,hyp):
 
 def get_CFD_value(componentSpecs, stepConditions, var, hyp, h, phi, T_1, T_2):
     big_it = hyp['big_it']
-    CFD_ht = pd.read_csv(hyp['CFD_ht_path']+f'_{big_it}.csv',sep=';')
+    CFD_ht = pd.read_csv(hyp['CFD_ht_path']+f'_{big_it}.csv',sep=';', encoding='utf-8')
     if abs(var[T_1] - stepConditions[T_2]) < 0.1 :
         var[h] = 0.1
     else :
