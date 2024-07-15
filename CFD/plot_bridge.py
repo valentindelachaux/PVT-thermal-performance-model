@@ -697,7 +697,7 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
                 Area_part = pr.top_area_tube_contact_PV(panelSpecs[f'part{i}'])
                 Area_panel = pr.top_area_tube_contact_PV(panelSpecs['main'])
                 
-                Qdot_top_rad.append((Area_part / Area_panel) * Qdot_top[-1])
+                Qdot_top_rad.append((Area_part / Area_panel) * 0) # to be checked
                 Qdot_PV_sky.append(
                     4.75 * ht_tot[ht_tot['Component'].isin(parts_top[i - 1])]['ht'].sum() + 
                     (Area_part / Area_panel) * 4.75 * ht_tot[ht_tot['Component'].isin(PV)]['ht'].sum()
@@ -734,7 +734,7 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
                 Area_part = pr.top_area_tube_contact_PV(panelSpecs[f'part{i}'])
                 Area_panel = pr.top_area_tube_contact_PV(panelSpecs['main'])
                 
-                Qdot_top_rad.append((Area_part / Area_panel) * Qdot_top[-1])
+                Qdot_top_rad.append((Area_part / Area_panel) * 0) ## to be checked
                 Qdot_PV_sky.append(
                     4.75 * ht_tot[ht_tot['Component'].isin(parts_top[i - 1])]['ht'].sum() + 
                     (Area_part / Area_panel) * 4.75 * ht_tot[ht_tot['Component'].isin(PV)]['ht'].sum()
@@ -755,10 +755,9 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
         ht_rad_AR = ht_rad_AR_list[iteration]
         ht_conv_AR = ht_conv_AR_list[iteration]
 
-        ht_tot_uniform = ht_tot_uniform[iteration]
-        ht_rad_uniform = ht_rad_uniform[iteration]
-        ht_conv_uniform = ht_conv_uniform[iteration]
-
+        ht_tot_uniform = ht_tot_uniform
+        ht_rad_uniform = ht_rad_uniform
+        ht_conv_uniform = ht_conv_uniform
         Qdot_tube_back_AR = []
         Qdot_top_AR = []
         Qdot_top_rad_AR = []
@@ -785,16 +784,16 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
                 Area_part = pr.top_area_tube_contact_PV(panelSpecs[f'part{i}'])
                 Area_panel = pr.top_area_tube_contact_PV(panelSpecs['main'])
                 
-                Qdot_top_rad_uniform.append((Area_part / Area_panel) * Qdot_top[-1]) # to be checked
-                Qdot_top_rad_AR.append((Area_part / Area_panel) * Qdot_top[-1])
+                Qdot_top_rad_uniform.append((Area_part / Area_panel) * 0) # to be checked
+                Qdot_top_rad_AR.append((Area_part / Area_panel) * 0)
 
                 Qdot_PV_sky_uniform.append(
                     4.75 * ht_tot_uniform[ht_tot_uniform['Component'].isin(parts_top[i - 1])]['ht'].sum() + 
                     (Area_part / Area_panel) * 4.75 * ht_tot_uniform[ht_tot_uniform['Component'].isin(PV)]['ht'].sum()
                 )
                 Qdot_PV_sky_AR.append(
-                    4.75 * ht_tot_AR[ht_tot_AR['Component'].isin(parts_top[i - 1])]['conv_ht'].sum() + 
-                    (Area_part / Area_panel) * 4.75 * ht_tot_AR[ht_tot_AR['Component'].isin(PV)]['conv_ht'].sum()
+                    4.75 * ht_tot_AR[ht_tot_AR['Component'].isin(parts_top[i - 1])]['ht'].sum() + 
+                    (Area_part / Area_panel) * 4.75 * ht_tot_AR[ht_tot_AR['Component'].isin(PV)]['ht'].sum()
                 )
             else:
                 Qdot_tube_back_uniform.append(4.75 * ht_conv_uniform[ht_conv_uniform['Component'].isin(parts_tube_back[i - 1])]['conv_ht'].sum())
@@ -1169,10 +1168,8 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
             iterations_1d = [[] for _ in range(nb_hx + 3)]
             iterations = [[] for _ in range(nb_hx + 3)]
 
-            # Créer une figure pour les valeurs de Qdot_top
             fig = go.Figure()
 
-            # Boucle sur chaque itération pour calculer les valeurs et les afficher
             for iteration in range(nb_it):
                 Qdot_tube_fluid, Qdot_top, Qdot_top_rad, Qdot_tube_back, Qdot_PV_sky = calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, no_mesh, no_case, iteration)
                 if Qdot == 'Qdot_tube_fluid':
@@ -1190,7 +1187,6 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 values_cfd.append(value_cfd)
                 iterations_cfd.append(iteration + 1)
 
-                # Récupérer les valeurs pour Qdot_top_conv pour 1D
                 for part in range(1, nb_hx + 3):
                     value_1d = df_one_list[iteration][Qdot].loc[f'part{part}']
                     values_1d[part-1].append(value_1d)
@@ -1200,9 +1196,7 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                     iterations[part-1].append(iteration + 0.5)
                     iterations[part-1].append(iteration + 1)
 
-                # Ajouter les valeurs CFD et 1D à la figure
                 for part in range(1, nb_hx + 3):
-                    # Tracer les valeurs CFD
                     fig.add_trace(go.Scatter(x=iterations_cfd, 
                                                 y=[qt[part-1] for qt in values_cfd],
                                                 mode='markers',
@@ -1211,7 +1205,6 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                                                 marker=dict(symbol='cross'),
                                                 hovertemplate='CFD Itération: %{x}'+f'<br>{Qdot} :'+ '%{y:.2f} W<br>Part '+f'{part}',))
 
-                    # Tracer les valeurs 1D
                     fig.add_trace(go.Scatter(x=iterations_1d[part-1], 
                                                 y=values_1d[part-1],
                                                 mode='markers',
@@ -1226,12 +1219,10 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                                                 name=f'Part {part}',
                                                 line=dict(width=2, color=part_colors[part-1], dash='dot')))
 
-                # Mise en forme du titre et des axes
                 fig.update_layout(title=f'{Qdot} - Cas {no_case} - Simu M{no_mesh+1}',
                                     xaxis_title='Itération',
                                     yaxis_title=f'{Qdot} [W]')
 
-            # Affichage de la figure
             fig.show()
 
         elif method == 'mesh' :
@@ -1324,13 +1315,10 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
             iterations_1d = [[] for _ in range(nb_hx + 3)]
             iterations = [[] for _ in range(nb_hx + 3)]
 
-            # Créer une figure pour les valeurs de Qdot_top
             fig = go.Figure()
 
-            # Boucle sur chaque itération pour calculer les valeurs et les afficher
             for iteration in range(nb_it):
-                iteration = nb_it - 1
-                Qdot_tube_fluid_AR, Qdot_top_AR, Qdot_top_rad_AR, Qdot_tube_back_AR, Qdot_PV_sky_AR, Qdot_tube_fluid_uniform, Qdot_top_uniform, Qdot_top_rad_uniform, Qdot_tube_back_uniform, Qdot_PV_sky_uniform = calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0)
+                Qdot_tube_fluid_AR, Qdot_top_AR, Qdot_top_rad_AR, Qdot_tube_back_AR, Qdot_PV_sky_AR, Qdot_tube_fluid_uniform, Qdot_top_uniform, Qdot_top_rad_uniform, Qdot_tube_back_uniform, Qdot_PV_sky_uniform = calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = iteration)
                 if Qdot == 'Qdot_tube_fluid':
                     value_cfd = Qdot_tube_fluid_AR
                 elif Qdot == 'Qdot_top_conv':
@@ -1346,9 +1334,8 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 values_cfd.append(value_cfd)
                 iterations_cfd.append(iteration + 1)
 
-                # Récupérer les valeurs pour Qdot_top_conv pour 1D
                 for part in range(1, nb_hx + 3):
-                    value_1d = df_one_list[iteration][Qdot].loc[f'part{part}']
+                    value_1d = df_one_AR_list[iteration][Qdot].loc[f'part{part}']
                     values_1d[part-1].append(value_1d)
                     iterations_1d[part-1].append(iteration + 0.5)
                     values[part-1].append(value_1d)
@@ -1356,25 +1343,22 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                     iterations[part-1].append(iteration + 0.5)
                     iterations[part-1].append(iteration + 1)
 
-            # Ajouter les valeurs CFD et 1D à la figure
             for part in range(1, nb_hx + 3):
-                # Tracer les valeurs CFD
                 fig.add_trace(go.Scatter(x=iterations_cfd, 
                                             y=[qt[part-1] for qt in values_cfd],
                                             mode='markers',
                                             name=f'Part {part} CFD',
                                             line=dict(width=2, color=part_colors[part-1]),
                                             marker=dict(symbol='cross'),
-                                            hovertemplate='CFD Itération: %{x}'+f'<br>{Qdot} :'+ '%{y:.2f} W<br>Part %{text}',))
+                                            hovertemplate='CFD Itération: %{x}'+f'<br>{Qdot} :'+ '%{y:.2f} W<br>'+f'Part {part}',))
 
-                # Tracer les valeurs 1D
                 fig.add_trace(go.Scatter(x=iterations_1d[part-1], 
                                             y=values_1d[part-1],
                                             mode='markers',
                                             name=f'Part {part} 1D',
                                             line=dict(width=2, color=part_colors[part-1], dash='dot'),
                                             marker=dict(symbol='x'),
-                                            hovertemplate='1D Itération: %{x}'+f'<br>{Qdot} :'+ '%{y:.2f} W<br>Part %{text}',))
+                                            hovertemplate='1D Itération: %{x}'+f'<br>{Qdot} :'+ '%{y:.2f} W<br>'+f'Part {part}',))
                 
                 fig.add_trace(go.Scatter(x=iterations[part-1], 
                                             y=values[part-1],
@@ -1382,12 +1366,10 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                                             name=f'Part {part}',
                                             line=dict(width=2, color=part_colors[part-1], dash='dot')))
 
-            # Mise en forme du titre et des axes
             fig.update_layout(title=f'{Qdot} - Cas référence',
                                 xaxis_title='Itération',
                                 yaxis_title=f'{Qdot} [W]')
 
-            # Affichage de la figure
             fig.show()
 
         else :
@@ -1414,14 +1396,14 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
 
             for iteration in range(nb_it):
                 y_values_tot_iter = [0]
-                T_fluid_values_tot_iter = [apb.get_value('T_fluid_in_1','named_expression',PyFluent_list[iteration])]
+                T_fluid_values_tot_iter = [slices_df_list[iteration]['T_fluid_in'].iloc[1]]
                 temperature_profiles = []
                 
                 for i in range(1, nb_hx + 1):
-                    T_fluid_in = apb.get_value(f'T_fluid_in_{i}','named_expression',PyFluent_list[iteration])
+                    T_fluid_in = slices_df_list[iteration]['T_fluid_in'].iloc[i]
                     L = apb.get_value(f'L_{i}', 'named_expression', PyFluent_list[iteration])
-                    a_f = apb.get_value(f'a_f_{i}', 'named_expression', PyFluent_list[iteration])
-                    b_f = apb.get_value(f'b_f_{i}', 'named_expression', PyFluent_list[iteration])
+                    a_f = slices_df_list[iteration]['a_f'].iloc[i]
+                    b_f = slices_df_list[iteration]['b_f'].iloc[i]
                     
                     y_values = np.linspace(y_values_tot_iter[-1], y_values_tot_iter[-1] + L, int(L / step))
                     if i == 3:
@@ -1474,14 +1456,14 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
 
                     for iteration in range(nb_it):
                         y_values_tot_iter = [0]
-                        T_fluid_values_tot_iter = [apb.get_value('T_fluid_in_1','named_expression',PyFluent_mesh_case_list[mesh][case][iteration])]
+                        T_fluid_values_tot_iter = [slices_df_mesh_case_list[mesh][case][iteration]['T_fluid_in'].iloc[1]]
                         temperature_profiles = []
-                        
+
                         for i in range(1, nb_hx + 1):
-                            T_fluid_in = apb.get_value(f'T_fluid_in_{i}','named_expression',PyFluent_mesh_case_list[mesh][case][iteration])
+                            T_fluid_in = slices_df_mesh_case_list[mesh][case][iteration]['T_fluid_in'].iloc[i]
                             L = apb.get_value(f'L_{i}', 'named_expression', PyFluent_mesh_case_list[mesh][case][iteration])
-                            a_f = apb.get_value(f'a_f_{i}', 'named_expression', PyFluent_mesh_case_list[mesh][case][iteration])
-                            b_f = apb.get_value(f'b_f_{i}', 'named_expression', PyFluent_mesh_case_list[mesh][case][iteration])
+                            a_f = slices_df_mesh_case_list[mesh][case][iteration]['a_f'].iloc[i]
+                            b_f = slices_df_mesh_case_list[mesh][case][iteration]['b_f'].iloc[i]
 
                             y_values = np.linspace(y_values_tot_iter[-1], y_values_tot_iter[-1] + L, int(L / step))
                             if i == 3:
@@ -1530,14 +1512,14 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
 
             for iteration in range(nb_it):
                 y_values_tot_iter = [0]
-                T_fluid_values_tot_iter = [apb.get_value('T_fluid_in_1','named_expression',PyFluent_AR_list[iteration])]
+                T_fluid_values_tot_iter = [slices_df_AR_list[iteration]['T_fluid_in'].iloc[1]]
                 temperature_profiles = []
-                
+
                 for i in range(1, nb_hx + 1):
-                    T_fluid_in = apb.get_value(f'T_fluid_in_{i}','named_expression',PyFluent_AR_list[iteration])
+                    T_fluid_in = slices_df_AR_list[iteration]['T_fluid_in'].iloc[i]
                     L = apb.get_value(f'L_{i}', 'named_expression', PyFluent_AR_list[iteration])
-                    a_f = apb.get_value(f'a_f_{i}', 'named_expression', PyFluent_AR_list[iteration])
-                    b_f = apb.get_value(f'b_f_{i}', 'named_expression', PyFluent_AR_list[iteration])
+                    a_f = slices_df_AR_list[iteration]['a_f'].iloc[i]
+                    b_f = slices_df_AR_list[iteration]['b_f'].iloc[i]
                     
                     y_values = np.linspace(y_values_tot_iter[-1], y_values_tot_iter[-1] + L, int(L / step))
                     if i == 3:
@@ -1564,14 +1546,14 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
                 
 
             y_values_tot_iter = [0]
-            T_fluid_values_tot_iter = [apb.get_value('T_fluid_in_1','named_expression',df_PyFluent_uniform[0])]
+            T_fluid_values_tot_iter = [apb.get_value('T_fluid_in_1','named_expression',df_PyFluent_uniform)]
             temperature_profiles = []
             
             for i in range(1, nb_hx + 1):
-                T_fluid_in = apb.get_value(f'T_fluid_in_{i}','named_expression',df_PyFluent_uniform[0])
-                L = apb.get_value(f'L_{i}', 'named_expression', df_PyFluent_uniform[0])
-                a_f = apb.get_value(f'a_f_{i}', 'named_expression', df_PyFluent_uniform[0])
-                b_f = apb.get_value(f'b_f_{i}', 'named_expression', df_PyFluent_uniform[0])
+                T_fluid_in = apb.get_value(f'T_fluid_in_{i}','named_expression',df_PyFluent_uniform)
+                L = apb.get_value(f'L_{i}', 'named_expression', df_PyFluent_uniform)
+                a_f = apb.get_value(f'a_f_{i}', 'named_expression', df_PyFluent_uniform)
+                b_f = apb.get_value(f'b_f_{i}', 'named_expression', df_PyFluent_uniform)
                 
                 y_values = np.linspace(y_values_tot_iter[-1], y_values_tot_iter[-1] + L, int(L / step))
                 if i == 3:
@@ -1598,14 +1580,14 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
 
 
             y_values_tot_iter = [0]
-            T_fluid_values_tot_iter = [apb.get_value('T_fluid_in_1','named_expression',df_PyFluent_1D[0])]
+            T_fluid_values_tot_iter = [slices_df_1D['T_fluid_in'].iloc[1]]
             temperature_profiles = []
-            
+
             for i in range(1, nb_hx + 1):
-                T_fluid_in = apb.get_value(f'T_fluid_in_{i}','named_expression',df_PyFluent_1D[0])
-                L = apb.get_value(f'L_{i}', 'named_expression', df_PyFluent_1D[0])
-                a_f = apb.get_value(f'a_f_{i}', 'named_expression', df_PyFluent_1D[0])
-                b_f = apb.get_value(f'b_f_{i}', 'named_expression', df_PyFluent_1D[0])
+                T_fluid_in = slices_df_1D['T_fluid_in'].iloc[i]
+                L = apb.get_value(f'L_{i}', 'named_expression', df_PyFluent_1D)
+                a_f = slices_df_1D['a_f'].iloc[i]
+                b_f = slices_df_1D['b_f'].iloc[i]
                 
                 y_values = np.linspace(y_values_tot_iter[-1], y_values_tot_iter[-1] + L, int(L / step))
                 if i == 3:
@@ -1669,7 +1651,7 @@ def plot_1D_DeltaT(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) : ## A MODIF
                     for case in range(nb_cases):
                         tube_value = df_one_mesh_case_list[mesh][case][-1][Qdot].loc[f'part{part}']
                         T_in = stepConditions[case]['T_fluid_in0']
-                        T_out = apb.get_value('T_fluid_in_6', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
+                        T_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
                         Tmean = (T_in - T_out) / 2
                         delta_temp = Tmean - stepConditions[case]['T_amb']
 
