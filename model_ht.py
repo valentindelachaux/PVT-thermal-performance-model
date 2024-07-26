@@ -2,10 +2,15 @@ import math
 import copy
 import pandas as pd
 import numpy as np
+import scipy.constants as scc
 import heat_transfer as bht
 import ht
 
 from CoolProp.CoolProp import PropsSI
+
+import sys
+sys.path.append("../PVT-PL-model")
+import hx_hydraulic as hxhy
 
 # INTERNAL CONVECTIVE
 
@@ -39,13 +44,12 @@ def h_fluid(componentSpecs,stepConditions,var,hyp):
     T_fluid = stepConditions["T_fluid_in0"]
 
     p_fluid = hyp["p_fluid"]
-    fluid = hyp["fluid"]
-    glycol_rate = hyp["glycol_rate"]
+    fluid = hxhy.find_fluid({'name' : hyp['fluid'], 'glycol_rate' : hyp['glycol_rate']})
 
-    k_fluid = PropsSI('L', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
-    rho_fluid = PropsSI('D', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
-    mu_fluid = PropsSI('V', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
-    Pr = PropsSI('Prandtl', 'P', p_fluid, 'T', T_fluid, f'INCOMP::{fluid}[{glycol_rate}]')
+    k_fluid = PropsSI('L', 'P', p_fluid, 'T', T_fluid, fluid)
+    rho_fluid = PropsSI('D', 'P', p_fluid, 'T', T_fluid, fluid)
+    mu_fluid = PropsSI('V', 'P', p_fluid, 'T', T_fluid, fluid)
+    Pr = PropsSI('Prandtl', 'P', p_fluid, 'T', T_fluid, fluid)
 
     flow_rate_per_riser = (mdot/N_harp)/rho_fluid # en m3/s
     tube_section = math.pi*(D_tube/2)**2
@@ -229,7 +233,7 @@ def h_back_abs(componentSpecs,stepConditions,var,hyp):
 
     if  componentSpecs["is_anomaly"] == 1:
 
-        if hyp['method_h_back_anomaly'] == "like_exchanger":
+        if hyp['method_h_back_abs_anomaly'] == "like_exchanger":
             var["h_back"] = hyp['h_back_prev']
         else:
             raise ValueError("Method for h_back is not well defined for anomalies")
@@ -247,11 +251,11 @@ def h_back_abs(componentSpecs,stepConditions,var,hyp):
         else:
             T_ref = var["T_abs_mean"]
 
-        if hyp['method_h_back_manifold'] == "free_cylinder":
+        if hyp['method_h_back_abs_manifold'] == "free_cylinder":
                 # res = bht.back_h_mixed(T_ref,stepConditions["T_back"],stepConditions["u_back"],hyp["theta"],L_c)
             var["h_back"] = bht.back_h_cylinder(T_ref,stepConditions["T_back"],L_c)
 
-        elif hyp['method_h_back_manifold'] == "like_exchanger":
+        elif hyp['method_h_back_abs_manifold'] == "like_exchanger":
             var["h_back"] = hyp['h_back_prev']
 
         else:
@@ -354,9 +358,7 @@ def h_back_tube(componentSpecs,stepConditions,var,hyp):
         L_c = componentSpecs['H_tube']
 
         if componentSpecs["insulated"] == 1 and stepConditions["compt"] >= 1:
-
             T_ref = var["T_ins_tube_mean"]
-
         else:
             T_ref = var["T_tube_mean"]
 
@@ -440,7 +442,7 @@ def h_rad(componentSpecs,stepConditions,var,hyp):
         None"""
     
     eps = componentSpecs["eps_PV"]
-    sigma = hyp["sigma"]
+    sigma = scc.sigma
     T_sky = stepConditions["T_sky"]
 
     T_PV = var["T_PV"]
@@ -469,7 +471,7 @@ def h_rad_back_tube(componentSpecs,stepConditions,var,hyp):
         var["h_rad_back_tube"]=1e-10
         return
 
-    sigma = hyp["sigma"]
+    sigma = scc.sigma
     T_back_rad = stepConditions["T_back"] # hypothèse T_amb = T_back   
     if componentSpecs["insulated"] == 1 and stepConditions["compt"] >= 1:
         T_ref = var["T_ins_tube_mean"]
@@ -499,7 +501,7 @@ def h_rad_back(componentSpecs,stepConditions,var,hyp):
         var["h_rad_back"]=1e-10
         return
 
-    sigma = hyp["sigma"]
+    sigma = scc.sigma
     T_back_rad = stepConditions["T_back"] # hypothèse T_amb = T_back   
     if componentSpecs["insulated"] == 1:
         T_ref = var["T_ins_mean"]
@@ -512,7 +514,7 @@ def h_rad_back(componentSpecs,stepConditions,var,hyp):
 
     if T_back_rad_changed > 0:
         T_back_rad_changed += 273.15
-        sigma = hyp["sigma"]
+        sigma = scc.sigma
 
         h2 = eps*sigma*(T_ref+T_back_rad_changed)*(T_ref**2+T_back_rad_changed**2)
         h1 = (h2*T_back_rad_changed)/T_back_rad
@@ -549,7 +551,7 @@ def h_rad_tube_abs(componentSpecs,stepConditions,var,hyp):
 
     else:
 
-        sigma = hyp["sigma"]
+        sigma = scc.sigma
 
         T_ref = var["T_tube_mean"]
         T_B = var["T_Base_mean"]
@@ -574,7 +576,7 @@ def h_rad_tube_sky(componentSpecs,stepConditions,var,hyp):
         None
     """
     eps = componentSpecs["eps_hx_top"]
-    sigma = hyp["sigma"]
+    sigma = scc.sigma
     T_sky = stepConditions["T_sky"]
 
     T_tube = var["T_tube_mean"]

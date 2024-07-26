@@ -287,25 +287,39 @@ def Qdot_tube_back_wo_ins_conv(componentSpecs,stepConditions,var):
     L = componentSpecs["L_tube"]
 
     h_back_tube = var["h_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    gamma_back = p_ext_tube*h_back_tube
-    # gamma_0_int = var["gamma_0_int"]
-    # gamma_1_int = var["gamma_1_int"]
-    # gamma = gamma_back + gamma_0_int + gamma_1_int
-    gamma = gamma_back
+    h_rad_back_tube = var["h_rad_back_tube"]
+    p_ext_tube = componentSpecs["p_ext_tube"]
+    p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
+    R_2 = componentSpecs["R_2"]
 
-    var["Qdot_tube_back_conv"] = L*gamma*(T_tube_m - T_back)
+    gamma_back_conv = p_ext_tube/(R_2+1/h_back_tube)
+    gamma_back_rad = p_ext_tube_rad/(R_2+1/h_rad_back_tube)
+    gamma_0_int = var["gamma_0_int"]
+    gamma_1_int = var["gamma_1_int"]
+
+    gamma = gamma_back_conv + gamma_back_rad + gamma_0_int + gamma_1_int
+
+    var["Qdot_tube_back_conv"] = L*gamma_back_conv*(T_tube_m - T_back)
 
 def Qdot_tube_back_wo_ins_rad(componentSpecs,stepConditions,var):
     T_tube_m = var["T_tube_mean"]
     T_back = stepConditions["T_back"]
     L = componentSpecs["L_tube"]
 
+    h_back_tube = var["h_back_tube"]
     h_rad_back_tube = var["h_rad_back_tube"]
-    p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    gamma_back = p_ext_tube*h_rad_back_tube
+    p_ext_tube = componentSpecs["p_ext_tube"]
+    p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
+    R_2 = componentSpecs["R_2"]
 
-    var["Qdot_tube_back_rad"] = L*gamma_back*(T_tube_m - T_back)
+    gamma_back_conv = p_ext_tube/(R_2+1/h_back_tube)
+    gamma_back_rad = p_ext_tube_rad/(R_2+1/h_rad_back_tube)
+    gamma_0_int = var["gamma_0_int"]
+    gamma_1_int = var["gamma_1_int"]
+
+    gamma = gamma_back_conv + gamma_back_rad + gamma_0_int + gamma_1_int
+
+    var["Qdot_tube_back_rad"] = L*gamma_back_rad*(T_tube_m - T_back)
 
 def Qdot_ins_tube_back_conv(componentSpecs,stepConditions,var):
 

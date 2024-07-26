@@ -12,6 +12,10 @@ from CoolProp.CoolProp import PropsSI
 
 import model_transfers as mtr
 
+import sys
+sys.path.append("../PVT-PL-model")
+import hx_hydraulic as hxhy
+
 mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
 add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
 
@@ -143,12 +147,13 @@ def S(componentSpecs,stepConditions,var):
         None"""
     
     tau_g = componentSpecs["tau_g"]
+    alpha_PV = componentSpecs["alpha_PV"]
     G = stepConditions["G"]
 
     #T_PV = var["T_PV"]
     eta_PV = var["eta_PV"]
 
-    S = tau_g*G*(1-eta_PV)
+    S = tau_g*alpha_PV*G*(1-eta_PV)
 
     var["S"] = S
 
@@ -293,14 +298,14 @@ def calc_gamma(componentSpecs, var):
     h_rad_back_tube = var["h_rad_back_tube"]
     p_ext_tube = componentSpecs["p_ext_tube"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
+    R_tube_ins = componentSpecs["R_tube_ins"]
 
-    gamma_back = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_rad_back = p_ext_tube_rad/(R_2+1/h_rad_back_tube)
+    gamma_back_conv = p_ext_tube/(R_tube_ins+1/h_back_tube)
+    gamma_back_rad = p_ext_tube_rad/(R_tube_ins+1/h_rad_back_tube)
     gamma_0_int = var["gamma_0_int"]
     gamma_1_int = var["gamma_1_int"]
 
-    gamma = gamma_back + gamma_rad_back + gamma_0_int + gamma_1_int
+    gamma = gamma_back_conv + gamma_back_rad + gamma_0_int + gamma_1_int
 
     return gamma
 
@@ -308,7 +313,7 @@ def e0(componentSpecs, var):
     """Calculates the e0 factor and stores it in var["e0"]
     
     $$
-    c_0 = \frac{1}{R_{inter}}+\frac{1}{R_bF'}+\frac{h_{rad,f}}{F'}
+    e_0 = \frac{1}{\chi} + h_{rad,f}p_{ext,tube} + C_B + \gamma + h_{rad,tube,sky}p_{tube,sky}
     $$
     
     Args:
@@ -572,7 +577,6 @@ def d1(componentSpecs, var):
 
     e1 = var["e1"]
 
-    # var["d1"] = (-gamma*d0)/R_B + h_rad_tube_abs*(1-(d0/R_B))
     var["d1"] = -e1*(gamma+h_rad_tube_abs*p_ext_tube_rad) + h_rad_tube_abs*p_ext_tube_rad
 
 def d2(componentSpecs, var):
@@ -821,7 +825,6 @@ def KTE_tf(componentSpecs,stepConditions,var):
     p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
     h_rad_tube_abs = var["h_rad_tube_abs"]
 
-    R_B = 1/(C_B+p_ext_tube_rad*h_rad_tube_abs)
     p_int_tube = componentSpecs["p_int_tube"]
     h_fluid = var["h_fluid"]
     chi = 1/(h_fluid*p_int_tube)
@@ -895,13 +898,12 @@ def Cp(componentSpecs,stepConditions,var,hyp):
     Returns:
         None
     """
+    
     T_m = (var["T_fluid_in"]+var["T_fluid_out"])/2 # K
-
     p_fluid = hyp["p_fluid"] # bar
-    fluid = hyp["fluid"]
-    glycol_rate = hyp["glycol_rate"] # %
+    fluid = hxhy.find_fluid({'name' : hyp['fluid'], 'glycol_rate' : hyp['glycol_rate']})
 
-    var["Cp"] = PropsSI('C','P', p_fluid*100000, 'T', T_m, f'INCOMP::{fluid}[{glycol_rate}]')
+    var["Cp"] = PropsSI('C','P', p_fluid*100000, 'T', T_m, fluid)
 
 def Biot(lambd,k,h,delta):
     """Calculates the Biot number
@@ -1218,6 +1220,8 @@ def compute_power(componentSpecs,stepConditions,var):
 def initialize_var(var,componentSpecs,stepConditions,hyp,i):
     # Initialize the var dictionary with all necessary keys and values
     
+    previous_var = var.copy()
+
     var = {'Slice' : i,
            'T_PV0':0,
            'Cp': hyp['Cp0'],
@@ -1225,7 +1229,8 @@ def initialize_var(var,componentSpecs,stepConditions,hyp,i):
             }
     
     if i==0:
-        var= {**var,**{
+        var= {**var,
+              **{
             "h_top_g": hyp["h_top0"],
             "h_back": hyp["h_back0"],
             "h_rad_back": hyp["h_rad_back0"],
@@ -1237,20 +1242,22 @@ def initialize_var(var,componentSpecs,stepConditions,hyp,i):
             'T_PV':stepConditions["guess_T_PV"],
             'T_fluid_in':stepConditions["T_fluid_in0"],
             'T_fluid_out':stepConditions["T_fluid_in0"]
-        }}
+            }}
+        
     else:
-        var = {**var,**{
-            'h_top_g':var['h_top_g'],
-            'h_back':var['h_back'],
-            'h_rad_back':var['h_rad_back'],
-            'h_rad_tube_sky':var['h_rad_tube_sky'],
-            'h_back_tube':var['h_back_tube'],
-            'h_back_fins':var['h_back_fins'],
-            'h_rad_back_tube':var['h_rad_back_tube'],
+        var = {**var,
+               **{
+                'h_top_g' : previous_var['h_top_g'],
+                'h_back' : previous_var['h_back'],
+                'h_rad_back' : previous_var['h_rad_back'],
+                'h_rad_tube_sky' : previous_var['h_rad_tube_sky'],
+                'h_back_tube' : previous_var['h_back_tube'],
+                'h_back_fins' : previous_var['h_back_fins'],
+                'h_rad_back_tube' : previous_var['h_rad_back_tube'],
 
-            'T_PV':var['T_PV'],
-            'T_fluid_in':var['T_fluid_out'],
-            'T_fluid_out':var['T_fluid_out']
+                'T_PV' : previous_var['T_PV'],
+                'T_fluid_in' : previous_var['T_fluid_out'],
+                'T_fluid_out' : previous_var['T_fluid_out']
             }}
 
     var["T_tube_mean"] = (var["T_PV"]+var["T_fluid_in"])/2
@@ -1290,12 +1297,13 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
     var = {}
 
     for i in range(N_meander):
+
         var = initialize_var(var, componentSpecs, stepConditions, hyp, i)
         compt = 0
         stepConditions["compt"] = compt
         its_data = []
 
-        while compt <= 3 or abs(var["T_PV"] - var["T_PV0"]) >= 0.00001:
+        while compt <= 3 or abs(var["T_PV"] - var["T_PV0"]) >= 0.001:
             compt += 1
             stepConditions["compt"] = compt
 
@@ -1330,7 +1338,7 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
 
     return slices_df, df_one, its_data_list
 
-def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly = 0):
+def simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp, method_anomaly = 0):
     
     res = {}
 
@@ -1408,20 +1416,11 @@ def simu_steadyStateConditions(panelSpecs,hyp,steadyStateConditions_df):
     df_res = pd.DataFrame()
 
     compt_test = 0
-
-    list_df = []
-    list_list_df_historic = []
     list_res = []
 
     for i in range(0,len(steadyStateConditions_df)):
 
-        stepConditions = {'G':steadyStateConditions_df["G"][i],"T_amb":steadyStateConditions_df["T_amb"][i],"T_back":steadyStateConditions_df["T_amb"][i],"u":steadyStateConditions_df["u"][i], "u_back" : steadyStateConditions_df["u_back"][i], "T_fluid_in0":steadyStateConditions_df["T_fluid_in"][i]}
-        change_T_sky(stepConditions,hyp,'TUV')  # calculate Gp and T_sky
-
-        stepConditions["mdot"] = steadyStateConditions_df["mdot"][i]
-
-        # stepConditions["guess_T_PV"] = stepConditions["T_amb"] - 25
-        stepConditions["guess_T_PV"] = (stepConditions["T_amb"]+stepConditions["T_fluid_in0"])/2
+        stepConditions = steadyStateConditions_df.iloc[i].to_dict()
 
         df_one,res = simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp)
 
@@ -1430,57 +1429,10 @@ def simu_steadyStateConditions(panelSpecs,hyp,steadyStateConditions_df):
 
         compt_test+=1
 
-    # Analysing df
+    df_res['T_m'] = (1/2) * (df_res['T_fluid_in'] + df_res['T_fluid_out'])
+    df_res['T_m - T_amb'] = df_res['T_m'] - df_res['T_amb']
 
-    # Be careful here you have zeros for some columns
-
-    tab = pd.DataFrame()
-
-    df_res['DT'] = df_res['T_fluid_out'] - df_res['T_fluid_in']
-    df_res['Tm'] = (df_res['T_fluid_out'] + df_res['T_fluid_in'])/2
-    df_res['T_m en °C'] = df_res['Tm']-273.15
-
-    tab['G'] = df_res['G'] # a0
-    tab['-(T_m - T_a)'] = -(df_res['Tm'] - df_res['T_amb']) # a1
-    # tab['-(T_m - T_a)^2'] = -(df_res['Tm'] - df_res['T_amb'])**2 # a2
-    tab['-(T_m - T_a)^2'] = 0.*df_res['Tm'] # a2
-    tab['-up x (T_m - T_a)'] = (df_res['u'] - 3) * tab['-(T_m - T_a)'] # a3
-    # tab['Gp'] = df_res['Gp'] # a4
-    tab['Gp'] = 0. * df_res['Gp'] # a4
-    tab['dTm/dt'] = 0. * df_res['Gp'] # a5
-    tab['up x G'] = -(df_res['u'] - 3) * df_res['G'] # a6
-    tab['up x Gp'] = -(df_res['u'] - 3) * df_res["Gp"] # a7
-    tab['-(T_m - T_a)^4'] = -tab['-(T_m - T_a)']**4 # a8
-
-    # coeff_density = [999.85,0.05332,-0.007564,0.00004323,-1.673e-7,2.447e-10]
-    # coeff_density = list(reversed(coeff_density))
-
-    coeff_Cp = [4.2184,-0.0028218,0.000073478,-9.4712e-7,7.2869e-9,-2.8098e-11,4.4008e-14]
-    coeff_Cp = list(reversed(coeff_Cp))
-
-    # df_res['density(T)'] = np.polyval(coeff_density,df_res['T_m en °C'])
-    df_res['Cp(T)'] = np.polyval(coeff_Cp,df_res['T_m en °C'])*1000
-
-    # df_res['mdot'] = df_res['density(T)']*(stepConditions["mdot"]/1000)
-
-    df_res['Qdot'] = df_res['mdot']*df_res['Cp(T)']*df_res['DT']
-    df_res['Qdot / AG'] = df_res['Qdot']/(panelSpecs['AG'])
-
-    matrice = tab.to_numpy()
-    B = df_res['Qdot / AG'].to_numpy()
-
-    X = np.linalg.lstsq(matrice, B, rcond = -1)
-
-    #_ = plt.plot(df['T_m*'].to_numpy(), B, 'o', label='Original data', markersize=2)
-    #_ = plt.plot(df['T_m*'].to_numpy(), np.dot(matrice,X[0]), 'o', label='Fitted line',markersize=2)
-    #_ = plt.legend()
-    #plt.show()
-
-    df_res_to_concat = df_res.drop(columns=["G","Gp"])
-
-    df_res = pd.concat([tab,df_res_to_concat],axis=1)
-
-    return df_res,X,list_res
+    return df_res,list_res
 
 def update_heat_transfer_coefficients(var, hyp, index):
     # This function should update heat transfer coefficients for the current index
@@ -1591,18 +1543,6 @@ def change_u(componentSpecs,stepConditions,wind_speed):
 
     componentSpecs["h_top"]=new_h_wind
     componentSpecs["R_t"]= componentSpecs["R_top"] + 1/componentSpecs["h_top"]
-
-def change_T_sky(stepConditions,hyp,type):
-    if type == "TUV":
-        stepConditions["Gp"] = 4
-        stepConditions["T_sky"] = stepConditions["T_amb"]
-        # stepConditions["T_sky"] = ((stepConditions["Gp"]/hyp["sigma"]) + stepConditions["T_amb"]**4)**(1/4)
-    
-    else :
-        Tsk = 0.0552*stepConditions["T_amb"]**1.5
-
-        stepConditions["T_sky"] = Tsk
-        stepConditions["Gp"] = hyp["sigma"]*(stepConditions["T_sky"]**4 - stepConditions["T_amb"]**4)
 
 def change_N_ail(componentSpecs,N):
     componentSpecs["N_ail"] = N

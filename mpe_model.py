@@ -19,7 +19,7 @@ def simu_condi_mpe(componentSpecs,steadyStateConditions_df,l,h_back,L,hyp):
     # Dataframe object
     df = pd.DataFrame(columns = variables)
 
-    sigma = hyp["sigma"]
+    sigma = scc.sigma
 
     compt_test = 0
 
@@ -109,7 +109,7 @@ def simu_condi_mpe_big(componentSpecs,stepConditions,steadyStateConditions_df,l,
     # Dataframe object
     df_res = pd.DataFrame(columns = variables)
 
-    sigma = hyp["sigma"]
+    sigma = scc.sigma
 
     compt_test = 0
 
