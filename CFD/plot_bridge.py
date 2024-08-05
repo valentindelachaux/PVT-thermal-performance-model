@@ -636,6 +636,16 @@ def get_data(plot_hyp, panelSpecs, hyp, stepConditions) :
         else : 
             raise ValueError('method should be either mesh, case or ref')
 
+def extract_surface_integrals(surface_name, file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+    mass_flow_rate = None
+    for line in lines:
+        if surface_name in line:
+            parts = line.split()
+            mass_flow_rate = parts[-1]
+    return(float(mass_flow_rate))
+
 def extract_residuals(file_path):
     with open(file_path, 'r') as file:
         data = file.read()
@@ -857,14 +867,12 @@ def rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
         ht_rad = ht_rad_list[iteration]
         ht_conv = ht_conv_list[iteration]
         tot_part= ht_tot[ht_tot['Component'].isin(['pv_front']) ]['ht'].values[0]
-        source_part = ht_tot[ht_tot['Component'].isin(['User Energy Source']) ]['ht'].values[0]
         rad_part = ht_rad[ht_rad['Component'].isin(['pv_front']) ]['rad_ht'].values[0]
         conv_part = ht_conv[ht_conv['Component'].isin(['pv_front']) ]['conv_ht'].values[0]
-        ratio_rad = rad_part/(tot_part-source_part)
-        ratio_conv = conv_part/(tot_part-source_part)
-        ratio_source = -source_part/(tot_part-source_part)
+        ratio_rad = rad_part/(tot_part)
+        ratio_conv = conv_part/(tot_part)
 
-        return ratio_rad, ratio_conv, ratio_source
+        return ratio_rad, ratio_conv
     
     elif method == 'mesh' :
         ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -875,14 +883,12 @@ def rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
         ht_conv = ht_conv_mesh_case_list[mesh][case][iteration]
         
         tot_part= ht_tot[ht_tot['Component'].isin(['pv_front']) ]['ht'].values[0]
-        source_part = ht_tot[ht_tot['Component'].isin(['User Energy Source']) ]['ht'].values[0]
         rad_part = ht_rad[ht_rad['Component'].isin(['pv_front']) ]['rad_ht'].values[0]
         conv_part = ht_conv[ht_conv['Component'].isin(['pv_front']) ]['conv_ht'].values[0]
-        ratio_rad = rad_part/(tot_part-source_part)
-        ratio_conv = conv_part/(tot_part-source_part)
-        ratio_source = -source_part/(tot_part-source_part)
+        ratio_rad = rad_part/(tot_part)
+        ratio_conv = conv_part/(tot_part)
 
-        return(ratio_rad, ratio_conv, ratio_source)
+        return ratio_rad, ratio_conv
 
     elif method == 'ref' :
         ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -892,22 +898,18 @@ def rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
         ht_rad_AR = ht_rad_AR_list[iteration]
         ht_conv_AR = ht_conv_AR_list[iteration]
         tot_part= ht_tot_AR[ht_tot_AR['Component'].isin(['pv_front']) ]['ht'].values[0]
-        source_part = ht_tot_AR[ht_tot_AR['Component'].isin(['User Energy Source']) ]['ht'].values[0]
         rad_part = ht_rad_AR[ht_rad_AR['Component'].isin(['pv_front']) ]['rad_ht'].values[0]
         conv_part = ht_conv_AR[ht_conv_AR['Component'].isin(['pv_front']) ]['conv_ht'].values[0]
-        ratio_rad_AR = rad_part/(tot_part-source_part)
-        ratio_conv_AR = conv_part/(tot_part-source_part)
-        ratio_source_AR = -source_part/(tot_part-source_part)
+        ratio_rad_AR = rad_part/(tot_part)
+        ratio_conv_AR = conv_part/(tot_part)
 
         tot_part= ht_tot_uniform[ht_tot_uniform['Component'].isin(['pv_front']) ]['ht'].values[0]
-        source_part = ht_tot_uniform[ht_tot_uniform['Component'].isin(['User Energy Source']) ]['ht'].values[0]
         rad_part = ht_rad_uniform[ht_rad_uniform['Component'].isin(['pv_front']) ]['rad_ht'].values[0]
         conv_part = ht_conv_uniform[ht_conv_uniform['Component'].isin(['pv_front']) ]['conv_ht'].values[0]
-        ratio_rad_uniform = rad_part/(tot_part-source_part)
-        ratio_conv_uniform = conv_part/(tot_part-source_part)
-        ratio_source_uniform = -source_part/(tot_part-source_part)
+        ratio_rad_uniform = rad_part/(tot_part)
+        ratio_conv_uniform = conv_part/(tot_part)
 
-        return ratio_rad_AR, ratio_conv_AR, ratio_source_AR, ratio_rad_uniform, ratio_conv_uniform, ratio_source_uniform
+        return ratio_rad_AR, ratio_conv_AR, ratio_rad_uniform, ratio_conv_uniform
 
 def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
         method = plot_hyp['method']
@@ -920,7 +922,7 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
             nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
             no_case = plot_hyp['no_case']
             no_mesh = plot_hyp['no_mesh']
-            ratio_rad, ratio_conv, ratio_source = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, no_mesh, no_case, nb_it - 1)
+            ratio_rad, ratio_conv= rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, no_mesh, no_case, nb_it - 1)
 
             fig_comparison = go.Figure()
 
@@ -937,9 +939,9 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 if Qdot == 'Qdot_tube_fluid':
                     values.append(Qdot_tube_fluid[part - 1])
                 elif Qdot == 'Qdot_top_conv':
-                    values.append(ratio_conv*Qdot_top[part - 1])
+                    values.append(ratio_conv*(Qdot_top[part - 1]-Qdot_PV_sky[part - 1]))
                 elif Qdot == 'Qdot_top_rad':
-                    values.append(ratio_rad * Qdot_top[part - 1])
+                    values.append(ratio_rad * (Qdot_top[part - 1]-Qdot_PV_sky[part - 1]))
                 elif Qdot == 'Qdot_tube_back':
                     values.append(Qdot_tube_back[part - 1])
                 elif Qdot == 'Qdot_PV_sky':
@@ -986,7 +988,7 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 fig_comparison = go.Figure()
 
                 for mesh in range(nb_mesh):
-                    ratio_rad, ratio_conv, ratio_source = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh, case, nb_it - 1)
+                    ratio_rad, ratio_conv = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh, case, nb_it - 1)
 
                     values = []
 
@@ -996,9 +998,9 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                         if Qdot == 'Qdot_tube_fluid':
                             values.append(Qdot_tube_fluid[part - 1])
                         elif Qdot == 'Qdot_top_conv':
-                            values.append(ratio_conv*Qdot_top[part - 1])
+                            values.append(ratio_conv*(Qdot_top[part - 1]-Qdot_PV_sky[part - 1]))
                         elif Qdot == 'Qdot_top_rad':
-                            values.append(ratio_rad* Qdot_top[part - 1])
+                            values.append(ratio_rad*(Qdot_top[part - 1]-Qdot_PV_sky[part - 1]))
                         elif Qdot == 'Qdot_tube_back':
                             values.append(Qdot_tube_back[part - 1])
                         elif Qdot == 'Qdot_PV_sky':
@@ -1015,7 +1017,7 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                         opacity=0.8
                     ))
                 fig_comparison.update_layout(
-                    title=f'{Qdot} results <br> {folder_mesh}{mesh} - {folder_case}{case}',
+                    title=f'{Qdot} results <br> {folder_mesh} - {folder_case}{case}',
                     xaxis_title='Parties',
                     yaxis_title=f'{Qdot} [W]',
                     xaxis=dict(
@@ -1035,7 +1037,7 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
         elif method == 'ref' :
             ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
             nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_AR_list[0]))
-            ratio_rad, ratio_conv, ratio_source, ratio_rad_uniform, ratio_conv_uniform, ratio_source_uniform = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, 0, 0, nb_it - 1)
+            ratio_rad, ratio_conv, ratio_rad_uniform, ratio_conv_uniform = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, 0, 0, nb_it - 1)
 
             fig_comparison = go.Figure()
 
@@ -1054,12 +1056,12 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                     values_uniform.append(Qdot_tube_fluid_uniform)
 
                 elif Qdot == 'Qdot_top_conv':
-                    values_AR.append(ratio_conv*Qdot_top_AR)
-                    values_uniform.append(ratio_conv_uniform*Qdot_top_uniform)
+                    values_AR.append(ratio_conv*(Qdot_top_AR-Qdot_PV_sky_AR[part - 1]))
+                    values_uniform.append(ratio_conv_uniform*(Qdot_top_uniform-Qdot_PV_sky_uniform[part - 1]))
 
                 elif Qdot == 'Qdot_top_rad':
-                    values_AR.append(ratio_rad*Qdot_top_AR)
-                    values_uniform.append(ratio_rad_uniform*Qdot_top_uniform)
+                    values_AR.append(ratio_rad*(Qdot_top_AR-Qdot_PV_sky_AR[part - 1]))
+                    values_uniform.append(ratio_rad_uniform*(Qdot_top_uniform-Qdot_PV_sky_uniform[part - 1]))
 
                 elif Qdot == 'Qdot_tube_back':
                     values_AR.append(Qdot_tube_back_AR)
@@ -1187,7 +1189,7 @@ def plot_1D_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                     ))
 
                 fig_comparison.update_layout(
-                    title=f'{Qdot} results <br> {folder_mesh}{mesh} - {folder_case}{case}',
+                    title=f'{Qdot} results <br> {folder_mesh} - {folder_case}{case}',
                     xaxis_title='Parties',
                     yaxis_title=f'{Qdot} [W]',
                     barmode='group',
@@ -1860,7 +1862,107 @@ def plot_1D_DeltaT_tot(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) : ## A M
         else :
             raise ValueError('method should be either mesh, case or ref')
 
+def compute_quality(plot_hyp, panelSpecs, hyp, stepConditions) :
+        method = plot_hyp['method']
+        nb_it = plot_hyp['nb_it']
+        folder_path = plot_hyp['folder_path']
+        folder_case = plot_hyp['folder_name']
+        folder_mesh = plot_hyp['folder_mesh']
 
+        if method == 'case' :
+            ht_tot_list, ht_rad_list, ht_conv_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
+            no_case = plot_hyp['no_case']
+            no_mesh = plot_hyp['no_mesh']
+            no_it = plot_hyp['nb_it']-1
+
+            T_air_in = stepConditions[no_case]['T_amb']
+            T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_list[-1])
+            T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_list[-1])
+
+            T_air_out = 0 ## Valeur moyenne en sortie ? => report 
+
+            folder_path = os.path.join(folder_path, f'{folder_mesh}{no_mesh+1}', f'{folder_case}{no_case}')
+            file_name = f'mass_flow_rate_cas{no_case}_it{no_it}'
+            mdot_air = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
+            file_name = f'temp_outlet_cas{no_case}_it{no_it+1}'
+            T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
+
+            mdot_water = stepConditions[no_case]['mdot']
+
+            cp_water = 3800
+            cp_air = 1004
+            
+            q_air = mdot_air*cp_air
+            q_water = mdot_water*cp_water
+
+            Z = q_air / q_water
+            if q_air > q_water :
+                epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+            else : 
+                epsilon = (T_air_in - T_air_out)/(T_air_in - T_man_in)
+            NUT = (1/(1-Z))*np.log((1-Z*epsilon)/(1-epsilon))
+
+            return epsilon, NUT
+
+        elif method == 'mesh' :
+            ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_mesh_case_list[0][0][0]))
+            nb_mesh = plot_hyp['nb_mesh']
+            nb_cases = plot_hyp['nb_cases']
+            no_it = plot_hyp['nb_it']-1
+
+            epsilon_mesh_case_list = []
+            NUT_mesh_case__list = []
+
+            for mesh in range(nb_mesh):
+                epsilon_case_list = []
+                NUT_case_list = []
+                for case in range(nb_cases):
+
+                    T_air_in = stepConditions[no_case]['T_amb']
+                    T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_list[-1])
+                    T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_list[-1])
+
+                    T_air_out = 0 ## Valeur moyenne en sortie ? => report 
+
+                    folder_path = os.path.join(folder_path, f'{folder_mesh}{mesh+1}', f'{folder_case}{case}')
+                    file_name = f'mass_flow_rate_cas{case}_it{no_it}'
+                    mdot_air = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
+                    file_name = f'temp_outlet_cas{no_case}_it{no_it+1}'
+                    T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
+
+                    mdot_water = stepConditions[case]['mdot']
+
+                    cp_water = 3800
+                    cp_air = 1004
+                    
+                    q_air = mdot_air*cp_air
+                    q_water = mdot_water*cp_water
+
+                    Z = q_air / q_water
+
+                    if q_air > q_water :
+                        epsilon_value = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+                    else : 
+                        epsilon_value = (T_air_in - T_air_out)/(T_air_in - T_man_in)
+
+                    NUT_value = (1/(1-Z))*np.log((1-Z*epsilon_value)/(1-epsilon_value))
+
+                    epsilon_case_list.append(epsilon_value)
+                    NUT_case_list.append(NUT_value)
+                    
+                epsilon_mesh_case_list.append(epsilon_case_list)
+                NUT_mesh_case__list.append(NUT_case_list)
+
+            return epsilon_mesh_case_list, NUT_mesh_case__list
+
+        elif method == 'ref' :
+            ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_AR_list[0]))
+
+        else :
+            raise ValueError('method should be either mesh, case or ref')
 
 
 def plot_template(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
