@@ -970,7 +970,7 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 legend_title='Simulation'
             )
 
-            fig_comparison.show()
+            return(fig_comparison)
 
         elif method == 'mesh' :
             ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1031,8 +1031,7 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
 
                 fig_comparison_list.append(fig_comparison)
 
-            for fig_comparison in fig_comparison_list:
-                fig_comparison.show()
+            return(fig_comparison_list)
         
         elif method == 'ref' :
             ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1103,10 +1102,230 @@ def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 legend_title='Simulation'
             )
 
-            fig_comparison.show()
+            return(fig_comparison)
         
         else :
             raise ValueError('method should be either mesh, case or ref')
+        
+def plot_CFD_tot_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
+    method = plot_hyp['method']
+    nb_it = plot_hyp['nb_it']
+    folder_case = plot_hyp['folder_name']
+    folder_mesh = plot_hyp['folder_mesh']
+
+    if method == 'case' :
+        ht_tot_list, ht_rad_list, ht_conv_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+        nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
+        no_case = plot_hyp['no_case']
+        no_mesh = plot_hyp['no_mesh']
+        ratio_rad, ratio_conv= rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, no_mesh, no_case, nb_it - 1)
+
+        fig_comparison = go.Figure()
+
+        sim_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+        fig_comparison_list = []
+        bar_width = 0.8
+        bar_positions = np.arange(1, nb_hx + 4)
+
+        values = []
+        total_value = 0
+
+        for part in range(1, nb_hx + 3):
+            iteration = nb_it - 1
+            Qdot_tube_fluid, Qdot_top, Qdot_top_rad, Qdot_tube_back, Qdot_PV_sky = calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, no_mesh, no_case, iteration)
+            if Qdot == 'Qdot_tube_fluid':
+                value = Qdot_tube_fluid[part - 1]
+            elif Qdot == 'Qdot_top_conv':
+                value = ratio_conv * (Qdot_top[part - 1] - Qdot_PV_sky[part - 1])
+            elif Qdot == 'Qdot_top_rad':
+                value = ratio_rad * (Qdot_top[part - 1] - Qdot_PV_sky[part - 1])
+            elif Qdot == 'Qdot_tube_back':
+                value = Qdot_tube_back[part - 1]
+            elif Qdot == 'Qdot_PV_sky':
+                value = Qdot_PV_sky[part - 1]
+            else:
+                raise ValueError('Qdot should be either Qdot_tube_fluid, Qdot_top_conv, Qdot_top_rad, Qdot_tube_back or Qdot_PV_sky')
+            
+            values.append(value)
+            total_value += value
+
+        values.append(total_value)
+
+        fig_comparison.add_trace(go.Bar(
+            x=bar_positions,
+            y=values,
+            name=f'{folder_mesh} {no_mesh + 1}',
+            marker_color=sim_colors[no_mesh],
+            width=bar_width,
+            opacity=0.8
+        ))
+
+        fig_comparison.update_layout(
+            title=f'{Qdot} results <br> {folder_mesh}{no_mesh} - {folder_case}{no_case}',
+            xaxis_title='Parties',
+            yaxis_title=f'{Qdot} [W]',
+            xaxis=dict(
+                tickmode='array',
+                tickvals=np.arange(1, nb_hx + 4),
+                ticktext=[f'Part {i}' for i in range(1, nb_hx + 3)] + ['Total']
+            ),
+            barmode='group',
+            legend_title='Simulation'
+        )
+
+        return(fig_comparison)
+    
+    elif method == 'mesh' :
+        ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+        nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_mesh_case_list[0][0][0]))
+        nb_mesh = plot_hyp['nb_mesh']
+        nb_cases = plot_hyp['nb_cases']
+
+        sim_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+        fig_comparison_list = []
+        bar_width = 0.8 / nb_mesh
+        bar_positions = np.arange(1, nb_hx + 4)  # Ajustement pour inclure la barre du total
+
+        for case in range(nb_cases):
+            fig_comparison = go.Figure()
+
+            for mesh in range(nb_mesh):
+                ratio_rad, ratio_conv = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh, case, nb_it - 1)
+
+                values = []
+                total_value = 0  # Variable pour stocker le total
+
+                for part in range(1, nb_hx + 3):
+                    iteration = nb_it - 1
+                    Qdot_tube_fluid, Qdot_top, Qdot_top_rad, Qdot_tube_back, Qdot_PV_sky = calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh, case, iteration)
+                    if Qdot == 'Qdot_tube_fluid':
+                        value = Qdot_tube_fluid[part - 1]
+                    elif Qdot == 'Qdot_top_conv':
+                        value = ratio_conv * (Qdot_top[part - 1] - Qdot_PV_sky[part - 1])
+                    elif Qdot == 'Qdot_top_rad':
+                        value = ratio_rad * (Qdot_top[part - 1] - Qdot_PV_sky[part - 1])
+                    elif Qdot == 'Qdot_tube_back':
+                        value = Qdot_tube_back[part - 1]
+                    elif Qdot == 'Qdot_PV_sky':
+                        value = Qdot_PV_sky[part - 1]
+                    else:
+                        raise ValueError('Qdot should be either Qdot_tube_fluid, Qdot_top_conv, Qdot_top_rad, Qdot_tube_back or Qdot_PV_sky')
+                    
+                    values.append(value)
+                    total_value += value  # Ajout de la valeur au total
+
+                # Ajouter le total à la liste des valeurs
+                values.append(total_value)
+
+                fig_comparison.add_trace(go.Bar(
+                    x=bar_positions + (mesh - (nb_mesh - 1) / 2) * bar_width,
+                    y=values,
+                    name=f'{folder_mesh}{mesh + 1}',
+                    marker_color=sim_colors[mesh],
+                    width=bar_width,
+                    opacity=0.8
+                ))
+
+            fig_comparison.update_layout(
+                title=f'{Qdot} results <br> {folder_mesh} - {folder_case}{case}',
+                xaxis_title='Parties',
+                yaxis_title=f'{Qdot} [W]',
+                xaxis=dict(
+                    tickmode='array',
+                    tickvals=np.arange(1, nb_hx + 4),
+                    ticktext=[f'Part {i}' for i in range(1, nb_hx + 3)] + ['Total']  # Ajout de l'étiquette "Total"
+                ),
+                barmode='group',
+                legend_title='Simulation'
+            )
+
+            fig_comparison_list.append(fig_comparison)
+
+        return(fig_comparison_list)
+
+    elif method == 'ref' :
+        ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+        nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_AR_list[0]))
+        ratio_rad, ratio_conv, ratio_rad_uniform, ratio_conv_uniform = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, 0, 0, nb_it - 1)
+
+        fig_comparison = go.Figure()
+
+        sim_colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2']
+        fig_comparison_list = []
+        bar_width = 0.8 / 2
+        bar_positions = np.arange(1, nb_hx + 4)  # Ajustement pour inclure la barre du total
+
+        values_AR = []
+        values_uniform = []
+        total_value_AR = 0  # Variable pour stocker le total pour Méthode 1D
+        total_value_uniform = 0  # Variable pour stocker le total pour Méthode CFD hx uniforme
+
+        for part in range(1, nb_hx + 3):
+            iteration = nb_it - 1
+            Qdot_tube_fluid_AR, Qdot_top_AR, Qdot_top_rad_AR, Qdot_tube_back_AR, Qdot_PV_sky_AR, Qdot_tube_fluid_uniform, Qdot_top_uniform, Qdot_top_rad_uniform, Qdot_tube_back_uniform, Qdot_PV_sky_uniform = calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0)
+            
+            if Qdot == 'Qdot_tube_fluid':
+                value_AR = Qdot_tube_fluid_AR
+                value_uniform = Qdot_tube_fluid_uniform
+            elif Qdot == 'Qdot_top_conv':
+                value_AR = ratio_conv * (Qdot_top_AR - Qdot_PV_sky_AR[part - 1])
+                value_uniform = ratio_conv_uniform * (Qdot_top_uniform - Qdot_PV_sky_uniform[part - 1])
+            elif Qdot == 'Qdot_top_rad':
+                value_AR = ratio_rad * (Qdot_top_AR - Qdot_PV_sky_AR[part - 1])
+                value_uniform = ratio_rad_uniform * (Qdot_top_uniform - Qdot_PV_sky_uniform[part - 1])
+            elif Qdot == 'Qdot_tube_back':
+                value_AR = Qdot_tube_back_AR
+                value_uniform = Qdot_tube_back_uniform
+            elif Qdot == 'Qdot_PV_sky':
+                value_AR = Qdot_PV_sky_AR
+                value_uniform = Qdot_PV_sky_uniform
+            else:
+                raise ValueError('Qdot should be either Qdot_tube_fluid, Qdot_top_conv, Qdot_top_rad, Qdot_tube_back or Qdot_PV_sky')
+            
+            values_AR.append(value_AR)
+            total_value_AR += value_AR  # Ajout de la valeur au total pour Méthode 1D
+            
+            values_uniform.append(value_uniform)
+            total_value_uniform += value_uniform  # Ajout de la valeur au total pour Méthode CFD hx uniforme
+
+        # Ajouter les totaux à la liste des valeurs
+        values_AR.append(total_value_AR)
+        values_uniform.append(total_value_uniform)
+
+        fig_comparison.add_trace(go.Bar(
+            x=bar_positions + (0 - (2 - 1) / 2) * bar_width,
+            y=values_AR,
+            name='Méthode 1D',
+            marker_color=sim_colors[0],
+            width=bar_width,
+            opacity=0.8
+        ))
+        fig_comparison.add_trace(go.Bar(
+            x=bar_positions + (1 - (2 - 1) / 2) * bar_width,
+            y=values_uniform,
+            name='Méthode CFD hx uniforme',
+            marker_color=sim_colors[1],
+            width=bar_width,
+            opacity=0.8
+        ))
+
+        fig_comparison.update_layout(
+            title=f'{Qdot} results <br> Cas référence',
+            xaxis_title='Parties',
+            yaxis_title= f'{Qdot} [W]',
+            xaxis=dict(
+                tickmode='array',
+                tickvals=np.arange(1, nb_hx + 4),
+                ticktext=[f'Part {i}' for i in range(1, nb_hx + 3)] + ['Total']  # Ajout de l'étiquette "Total"
+            ),
+            barmode='group',
+            legend_title='Simulation'
+        )
+
+        return(fig_comparison)
+    
+    else :
+        raise ValueError('method should be either mesh, case or ref')
 
 def plot_1D_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
         method = plot_hyp['method']
@@ -1152,7 +1371,7 @@ def plot_1D_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 legend_title='Simulation'
             )
 
-            fig_comparison.show()
+            return(fig_comparison)
 
         elif method == 'mesh' :
             ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1198,8 +1417,7 @@ def plot_1D_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
 
                 fig_comparison_list.append(fig_comparison)
 
-            for fig_comparison in fig_comparison_list:
-                fig_comparison.show()
+            return(fig_comparison_list)
 
         elif method == 'ref' :
             ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1250,7 +1468,7 @@ def plot_1D_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                 legend_title='Simulation'
             )
 
-            fig_comparison.show()
+            return(fig_comparison)
 
         else : 
             raise ValueError('method should be either mesh, case or ref')
@@ -1331,7 +1549,7 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                                     xaxis_title='Itération',
                                     yaxis_title=f'{Qdot} [W]')
 
-            fig.show()
+            return(fig)
 
         elif method == 'mesh' :
             ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1409,7 +1627,7 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                                     yaxis_title=f'{Qdot} [W]',
                                     legend_title='Partie et Simulation')
 
-                fig.show()
+                return(fig)
 
         elif method == 'ref' :
             ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1478,7 +1696,7 @@ def plot_big_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
                                 xaxis_title='Itération',
                                 yaxis_title=f'{Qdot} [W]')
 
-            fig.show()
+            return(fig)
 
         else :
             raise ValueError('method should be either mesh, case or ref')
@@ -1546,7 +1764,7 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
                 template='plotly_white'
             )
 
-            fig.show()
+            return(fig)
 
         elif method == 'mesh' :
             ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1607,8 +1825,7 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
                     )
                 fig_list.append(fig)
 
-            for fig in fig_list :
-                fig.show()
+            return(fig_list)
 
         elif method == 'ref' :
             ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
@@ -1731,7 +1948,7 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
                 template='plotly_white'
             )
 
-            fig.show()
+            return(fig)
 
         else :
             raise ValueError('method should be either mesh, case or ref')
@@ -1790,7 +2007,7 @@ def plot_1D_DeltaT_part(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) : ## A 
                                     yaxis_title=f'{Qdot} [W]',
                                     legend_title='Partie et Régression Linéaire')
 
-                fig_top.show()
+                return(fig_top)
 
         elif method == 'ref' :
             print('Must be mesh method')
@@ -1854,7 +2071,7 @@ def plot_1D_DeltaT_tot(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) : ## A M
                                     yaxis_title=f'{Qdot} [W]',
                                     legend_title='Régression Linéaire')
 
-                fig_top.show()
+                return(fig_top)
 
         elif method == 'ref' :
             print('Must be mesh method')
@@ -1876,16 +2093,19 @@ def compute_quality(plot_hyp, panelSpecs, hyp, stepConditions) :
             no_mesh = plot_hyp['no_mesh']
             no_it = plot_hyp['nb_it']-1
 
-            T_air_in = stepConditions[no_case]['T_amb']
-            T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_list[-1])
-            T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_list[-1])
+            # T_air_in = stepConditions[no_case]['T_amb']
+            T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_list[no_it])
+            T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_list[no_it])
 
             T_air_out = 0 ## Valeur moyenne en sortie ? => report 
 
             folder_path = os.path.join(folder_path, f'{folder_mesh}{no_mesh+1}', f'{folder_case}{no_case}')
             file_name = f'mass_flow_rate_cas{no_case}_it{no_it}'
-            mdot_air = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
-            file_name = f'temp_outlet_cas{no_case}_it{no_it+1}'
+            mdot_air = -extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
+            # file_name = f'temp_inlet_cas{no_case}_it{no_it}'
+            # T_air_in = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
+            T_air_in = 273.15
+            file_name = f'temp_outlet_cas{no_case}_it{no_it}'
             T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
 
             mdot_water = stepConditions[no_case]['mdot']
@@ -1895,12 +2115,14 @@ def compute_quality(plot_hyp, panelSpecs, hyp, stepConditions) :
             
             q_air = mdot_air*cp_air
             q_water = mdot_water*cp_water
+            
 
             Z = q_air / q_water
-            if q_air > q_water :
-                epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
-            else : 
-                epsilon = (T_air_in - T_air_out)/(T_air_in - T_man_in)
+            # if q_air > q_water :
+            #     epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+            # else : 
+            #     epsilon = (T_air_in - T_air_out)/(T_air_in - T_man_in)
+            epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
             NUT = (1/(1-Z))*np.log((1-Z*epsilon)/(1-epsilon))
 
             return epsilon, NUT
@@ -1920,16 +2142,16 @@ def compute_quality(plot_hyp, panelSpecs, hyp, stepConditions) :
                 NUT_case_list = []
                 for case in range(nb_cases):
 
-                    T_air_in = stepConditions[no_case]['T_amb']
-                    T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_list[-1])
-                    T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_list[-1])
+                    T_air_in = stepConditions[case]['T_amb']
+                    T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
+                    T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
 
                     T_air_out = 0 ## Valeur moyenne en sortie ? => report 
 
-                    folder_path = os.path.join(folder_path, f'{folder_mesh}{mesh+1}', f'{folder_case}{case}')
+                    folder_path = os.path.join(plot_hyp['folder_path'], f'{folder_mesh}{mesh+1}', f'{folder_case}{case}')
                     file_name = f'mass_flow_rate_cas{case}_it{no_it}'
                     mdot_air = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
-                    file_name = f'temp_outlet_cas{no_case}_it{no_it+1}'
+                    file_name = f'temp_outlet_cas{case}_it{no_it+1}'
                     T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
 
                     mdot_water = stepConditions[case]['mdot']
