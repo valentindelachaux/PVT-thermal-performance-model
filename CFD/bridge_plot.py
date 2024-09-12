@@ -42,7 +42,6 @@ import fluids as fds
 import ht
 import general as gen
 
-
 ## FUNCTIONS
 def get_data(plot_hyp, panelSpecs, hyp, stepConditions) : 
     method = plot_hyp['method']
@@ -2185,7 +2184,6 @@ def compute_quality(plot_hyp, panelSpecs, hyp, stepConditions) :
 
         else :
             raise ValueError('method should be either mesh, case or ref')
-
 
 def plot_template(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
         method = plot_hyp['method']
