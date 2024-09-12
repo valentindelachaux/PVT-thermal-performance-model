@@ -98,6 +98,48 @@ def back_h(T_abs,T_amb,theta,longueur,largeur,N_ailettes,a,coeff_downward_cool_s
     
     return h
 
+def Biot(lambd,k,h,delta):
+    """Calculates the Biot number
+    
+    Args:
+        lambd (float): thickness of the material [m]
+        k (float): thermal conductivity of the material [W/m/K]
+        h (float): heat transfer coefficient [W/m2/K]
+        delta (float): width [m]
+        
+    Returns:
+        float: Biot number"""
+    return ((lambd*h)/k)*(1+lambd/delta)
+
+def lambda_c_fin(k, L_fin, lambd, h):
+    """Calculates the thermal conductivity of the fin
+    
+    Args:
+        k (float): thermal conductivity of the material [W/m/K]
+        A_c (float): cross-sectional area of the fin [m2]
+        h (float): heat transfer coefficient [W/m2/K]
+        P_c (float): perimeter of the fin [m]
+        
+    Returns:
+        float: thermal conductivity of the fin"""
+    
+    A_c = L_fin*lambd
+    P_c = 2*L_fin + lambd
+
+    return math.sqrt((k*A_c)/(h*P_c))
+
+def m_c_fin(Bi, lambda_c):
+    """Calculates the fin parameter
+    
+    Args:
+        Bi (float): Biot number
+        lambda_c (float): thermal conductivity of the fin [W/m/K]
+        
+    Returns:
+        float: fin parameter"""
+    
+    return math.sqrt((2*Bi)/(lambda_c)**2)
+
 def back_h_fins(T_abs,T_amb,theta,longueur,D,L_a):
     DT = T_abs - T_amb
     T_mean = (T_abs+T_amb)/2
@@ -401,3 +443,34 @@ def top_h_simple(T_s,T_amb,theta,longueur):
 
     print('DT',DT)
     return h_back_mean
+
+def view_factor_aligned_rectangles(X, Y, L):
+    X_bar = X / L
+    Y_bar = Y / L
+    term1 = np.log(((1 + X_bar**2) * (1 + Y_bar**2)) / (1 + X_bar**2 + Y_bar**2)) ** (1/2)
+    term2 = X_bar * np.sqrt(1 + Y_bar**2) * np.arctan(X_bar / np.sqrt(1 + Y_bar**2))
+    term3 = Y_bar * np.sqrt(1 + X_bar**2) * np.arctan(Y_bar / np.sqrt(1 + X_bar**2))
+    term4 = -X_bar * np.arctan(X_bar) - Y_bar * np.arctan(Y_bar)
+    F_ij = (2 / (np.pi * X_bar * Y_bar)) * (term1 + term2 + term3 + term4)
+    return F_ij
+
+def view_factor_perpendicular_rectangles(X, Y, Z):
+    W = Y / X
+    H = Z / X
+    term1 = W * np.arctan(1 / W)
+    term2 = H * np.arctan(1 / H)
+    term3 = - np.sqrt(H**2 + W**2) * np.arctan(1 / np.sqrt(H**2 + W**2))
+    term4 = (1 / 4) * np.log( 
+                               (((1 + W**2) * (1 + H**2)) / (1 + W**2 + H**2))
+                             * ((W**2*(1+W**2+H**2)) / ((1+W**2)*(W**2+H**2)))**(W**2)
+                             * ((H**2*(1+W**2+H**2)) / ((1+H**2)*(W**2+H**2)))**(H**2)
+                             )
+    F_ij = (1 / (np.pi * W)) * (term1 + term2 + term3 + term4)
+    return F_ij
+
+def view_factor_coaxial_disks(r_i, r_j, L):
+    R_i = r_i / L
+    R_j = r_j / L
+    S = 1 + R_j**2
+    F_ij = 0.5 * (S - np.sqrt(S**2 - 4 * (r_j / r_i)**2))
+    return F_ij

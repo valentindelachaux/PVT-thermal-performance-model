@@ -391,13 +391,13 @@ def h_back_fins(componentSpecs,stepConditions,var,hyp):
     Returns:
         None"""
 
-
-
     if hyp["h_back_fins_calc"] == "tube":
         var["h_back_fins"] = var["h_back_tube"]
+
     elif hyp["h_back_fins_calc"] == "abs":
         var["h_back_fins"] = var["h_back"]
-    elif hyp["h_back_fins_calc"] == "TS":
+
+    elif hyp["h_back_fins_calc"] == "TM":
         L_c = componentSpecs["L_fin"]
         D = componentSpecs["D"]
         h_free = hyp["coeff_h_back_fins_free"]*bht.back_h_fins(var["T_tube_mean"],stepConditions["T_back"],hyp["theta"],L_c,D,componentSpecs["Heta"])
@@ -408,6 +408,21 @@ def h_back_fins(componentSpecs,stepConditions,var,hyp):
         pass
 
 # RADIATIVE
+
+def h_back_fins_rad(componentSpecs,stepConditions,var,hyp):
+
+    eps_fin = componentSpecs.get("eps_fin",0.9)
+
+    sigma = scc.sigma
+    T_sky = stepConditions["T_sky"]
+
+    T_fin = var["T_PV"]
+
+    tau_g_IR = componentSpecs["tau_g_IR"]
+
+    h = tau_g_IR*eps*sigma*(T_PV+T_sky)*(T_PV**2+T_sky**2)
+    var["h_rad"]=h
+
 
 # Radiatif entre le verre et le ciel
 def h_rad_g(componentSpecs,stepConditions,var,hyp):
@@ -522,6 +537,8 @@ def h_rad_back(componentSpecs,stepConditions,var,hyp):
         h1 = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
 
     var["h_rad_back"]=h1
+
+
 
 # Radiatif entre le tube et l'absorbeur
 def h_rad_tube_abs(componentSpecs,stepConditions,var,hyp):

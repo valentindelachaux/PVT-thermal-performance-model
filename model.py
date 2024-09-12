@@ -905,22 +905,9 @@ def Cp(componentSpecs,stepConditions,var,hyp):
 
     var["Cp"] = PropsSI('C','P', p_fluid*100000, 'T', T_m, fluid)
 
-def Biot(lambd,k,h,delta):
-    """Calculates the Biot number
-    
-    Args:
-        lambd (float): thickness of the material [m]
-        k (float): thermal conductivity of the material [W/m/K]
-        h (float): heat transfer coefficient [W/m2/K]
-        delta (float): width [m]
-        
-    Returns:
-        float: Biot number"""
-    return ((lambd*h)/k)*(1+lambd/delta)
-
 def Bi_f3(componentSpecs,var):
     h_back = var["h_back_fins"]
-    var["Bi_f3"] = Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],h_back,componentSpecs["delta_f3"])
+    var["Bi_f3"] = bht.Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],h_back,componentSpecs["delta_f3"])
 
 def gamma0int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
     """Calculates the gamma_0_int factor and returns it
@@ -943,7 +930,7 @@ def gamma0int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
         Bi (float): Biot number
         gamma_0_int (float): gamma_0_int factor"""
     
-    Bi = Biot(lambd,k,h,delta)
+    Bi = bht.Biot(lambd,k,h,delta)
 
     alpha = math.sqrt(2*Bi)
     beta = math.sqrt(Bi/2)*(1/(1+lambd/delta))
@@ -980,7 +967,7 @@ def gamma1int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
         Bi (float): Biot number
         gamma_1_int (float): gamma_1_int factor"""
     
-    Bi = Biot(lambd,k,h,delta)
+    Bi = bht.Biot(lambd,k,h,delta)
 
     return Bi,2*k*((lambd*N*delta_int)/L_tube)*math.tanh(math.sqrt(2*Bi)*(L_fin/lambd))*(math.sqrt(2*Bi)/lambd)
 
@@ -990,7 +977,7 @@ def gamma_1_int(componentSpecs,var):
 
 def gamma_2_int(componentSpecs,var):
 
-    Bi = Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],var["h_back_fins"],componentSpecs["delta_f2"])
+    Bi = bht.Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],var["h_back_fins"],componentSpecs["delta_f2"])
     var["Bi_f2"] = Bi
     a = componentSpecs["lambd_ail"]
     delta = componentSpecs["delta_f2"]

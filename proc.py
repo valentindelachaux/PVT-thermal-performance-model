@@ -72,7 +72,9 @@ def L_af(par):
     par['L_af'] = (par['W'] - par['l_B'])/2 + 1E-10
 
 def insulated(par):
-    if par['lambd_abs_ins']>0:
+    lambd_ins = par.get('lambd_abs_ins',par.get('lambd_ins',0))
+    print('lambd_ins', lambd_ins)
+    if lambd_ins>0:
         par['insulated'] = 1
     else:
         par['insulated'] = 0
@@ -108,10 +110,12 @@ def R_inter(par):
     par["R_inter"] = par['lambd_si']/par['k_si'] + par['lambd_lower_EVA']/par['k_EVA'] + par['lambd_PVDF']/par['k_PVDF'] + par['lambd_PET']/par['k_PET'] + par['lambd_adh']/par['k_adh'] + par['lambd_lower_glass']/par['k_glass'] + par['lambd_conductive_plate']/par['k_conductive_plate'] + par['lambd_air']/par['k_air'] + par['lambd_abs']/par['k_abs']
 
 def R_2(par):
-    par["R_2"] = par['lambd_abs_ins']/par['k_ins'] + 1*1E-12
+    lambd_ins = par.get('lambd_abs_ins',par.get('lambd_ins',0))
+    par["R_2"] = lambd_ins/par['k_ins'] + 1*1E-12
 
 def R_tube_ins(par):
-    par["R_tube_ins"] = par['lambd_tube_ins']/par['k_ins'] + 1*1E-12
+    lambd_ins = par.get('lambd_tube_ins',par.get('lambd_ins',0))
+    par["R_tube_ins"] = lambd_ins /par['k_ins'] + 1*1E-12
 
 def top_area_tube_contact_PV(par):
     if par['geometry'] == 'harp':
