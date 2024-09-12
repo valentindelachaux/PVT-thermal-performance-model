@@ -158,6 +158,8 @@ def speed_natural_convection(T_abs,T_amb,theta,L):
 
     speed = ((scc.g*beta*abs(DT)*L)/Ra)**(1/2)
 
+    speed = np.sqrt((g*beta*DT*L)/nu)
+
     return speed
 
 def Ra_L(T_abs,T_amb,theta,L):
