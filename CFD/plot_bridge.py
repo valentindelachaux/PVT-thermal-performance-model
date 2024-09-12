@@ -736,7 +736,7 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
 
         for i in range(1, nb_hx + 3):
             if i == 3 or i == 5:
-                Qdot_tube_back.append(4.75 * ht_conv[ht_conv['Component'].isin(parts_tube_back[i - 1])]['conv_ht'].sum())
+                Qdot_tube_back.append(4.75 * ht_tot[ht_tot['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
                 Qdot_tube_fluid.append(-4.75 * ht_tot[ht_tot['Component'].isin(parts_tube_fluid[i - 1])]['ht'].sum())
                 Qdot_top.append(4.75 * ht_tot[ht_tot['Component'].isin(parts_top[i - 1])]['ht'].sum())
                 Qdot_top_rad.append(1e-6)
@@ -747,7 +747,7 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
                     - ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
                 )
             else:
-                Qdot_tube_back.append(4.75 * ht_conv[ht_conv['Component'].isin(parts_tube_back[i - 1])]['conv_ht'].sum())
+                Qdot_tube_back.append(4.75 * ht_tot[ht_tot['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
                 Qdot_tube_fluid.append(-4.75 * ht_tot[ht_tot['Component'].isin(parts_tube_fluid[i - 1])]['ht'].sum())
                 Qdot_top.append(1e-6)
                 Qdot_top_rad.append(1e-6)
