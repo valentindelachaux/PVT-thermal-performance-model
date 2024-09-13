@@ -109,9 +109,9 @@ def R_top(par):
 def R_inter(par):
     par["R_inter"] = par['lambd_si']/par['k_si'] + par['lambd_lower_EVA']/par['k_EVA'] + par['lambd_PVDF']/par['k_PVDF'] + par['lambd_PET']/par['k_PET'] + par['lambd_adh']/par['k_adh'] + par['lambd_lower_glass']/par['k_glass'] + par['lambd_conductive_plate']/par['k_conductive_plate'] + par['lambd_air']/par['k_air'] + par['lambd_abs']/par['k_abs']
 
-def R_2(par):
+def R_abs_ins(par):
     lambd_ins = par.get('lambd_abs_ins',par.get('lambd_ins',0))
-    par["R_2"] = lambd_ins/par['k_ins'] + 1*1E-12
+    par["R_abs_ins"] = lambd_ins/par['k_ins'] + 1*1E-12
 
 def R_tube_ins(par):
     lambd_ins = par.get('lambd_tube_ins',par.get('lambd_ins',0))
@@ -220,7 +220,7 @@ def import_geometry(path):
         R_g(el)
         R_top(el)
         R_inter(el)
-        R_2(el)
+        R_abs_ins(el)
         R_tube_ins(el)
 
     par["AG"] = par["main"]["AG"]

@@ -16,6 +16,8 @@ import sys
 sys.path.append("../PVT-PL-model")
 import hx_hydraulic as hxhy
 
+import model_fins as modfins
+
 mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
 add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
 
@@ -197,7 +199,7 @@ def j(componentSpecs,var):
     """Calculates the j factor and stores it in var["j"]
     
     $$
-    j = \frac{1}{R_{inter}F'}+\frac{1}{R_bF'}-\frac{1}{R_{inter}}+\frac{h_{rad,f}}{F'}
+    j = \frac{1}{R_{inter}F'}+\frac{1}{R_{abs-back} F'}-\frac{1}{R_{inter}}+\frac{h_{rad,f}}{F'}
     $$
     
     Args:
@@ -208,18 +210,15 @@ def j(componentSpecs,var):
         None"""
     
     R_inter = componentSpecs["R_inter"]
-    R_b = componentSpecs["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
-    h_rad_tube_abs = var["h_rad_tube_abs"]
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
 
     Fprime = var["Fp"]
 
-    j = 1/(Fprime*R_b) + 1/(R_inter*Fprime) - 1/R_inter
-
     if componentSpecs["fin_2"] == 1:
+        gamma_f2 = var["gamma_f2"]
+        R_abs_back += 1/(gamma_f2)
 
-        gamma_int = var["gamma_2_int"]
-
-        j += (gamma_int)/Fprime
+    j = 1/(Fprime*R_abs_back) + 1/(R_inter*Fprime) - 1/R_inter
 
     var["j"] = j
 
@@ -252,7 +251,7 @@ def b(componentSpecs,stepConditions,var):
     """Calculates the b factor and stores it in var["b"]
     
     $$
-    b = S+h_{rad}T_{sky}+\frac{T_{amb}}{R_t}+\frac{T_{back}}{R_bF'}+\frac{h_{rad,f}T_{tube,mean}}{F'}
+    b = S+h_{rad}T_{sky}+\frac{T_{amb}}{R_t}+\frac{T_{back}}{R_{abs-back} F'}+\frac{h_{rad,f}T_{tube,mean}}{F'}
     $$
     
     Args:
@@ -264,31 +263,19 @@ def b(componentSpecs,stepConditions,var):
         None"""
 
     T_back = stepConditions["T_back"]
-    R_b = componentSpecs["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
 
     h_rad = var["h_rad"]
     S = var["S"]
     Fprime = var["Fp"]
 
-    h_rad_tube_abs = var["h_rad_tube_abs"]
-
-    # if h_rad_tube_abs != 0:
-    #     T_tube_mean = var["T_tube_mean"]
-    #     b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime) + (h_rad_tube_abs*T_tube_mean)/Fprime
-    # else:
-    #     b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime)
-
-    # b = S+h_rad*T_sky+T_amb/R_t+T_back/(R_b*Fprime)
-
     S_star = var["S_star"]
 
-    b = S_star + T_back/(R_b*Fprime)
-
-
     if componentSpecs["fin_2"]==1:
-        gamma_int = var["gamma_2_int"]
+        gamma_f2 = var["gamma_f2"]
+        R_abs_back += 1/(gamma_f2)
 
-        b += (gamma_int*T_back)/Fprime
+    b = S_star + T_back/(R_abs_back*Fprime)
 
     var["b"] = b
 
@@ -302,10 +289,10 @@ def calc_gamma(componentSpecs, var):
 
     gamma_back_conv = p_ext_tube/(R_tube_ins+1/h_back_tube)
     gamma_back_rad = p_ext_tube_rad/(R_tube_ins+1/h_rad_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
+    gammaPrime_f0 = var["gammaPrime_f0"]
+    gammaPrime_f1 = var["gammaPrime_f1"]
 
-    gamma = gamma_back_conv + gamma_back_rad + gamma_0_int + gamma_1_int
+    gamma = gamma_back_conv + gamma_back_rad + gammaPrime_f0 + gammaPrime_f1
 
     return gamma
 
@@ -673,10 +660,10 @@ def KTE_Bt(componentSpecs,stepConditions,var):
     g_4 = (l_c/R_{inter})*(F'-1)*b_4
     g_5 = l_c*F'*S^{*}
 
-    h_1 = (-iota/R_b)*b_1
-    h_2 = (-iota/R_b)*b_2
-    h_3 = (iota/R_b)*(1-b_3)
-    h_4 = (-iota/R_b)*b_4
+    h_1 = (-iota/R_{abs-back} )*b_1
+    h_2 = (-iota/R_{abs-back} )*b_2
+    h_3 = (iota/R_{abs-back} )*(1-b_3)
+    h_4 = (-iota/R_{abs-back} )*b_4
     h_5 = 0
 
     i_1 = -2k_{abs}\lambda_{abs}m\tanh(mL_{af})(b_1/j)
@@ -709,7 +696,7 @@ def KTE_Bt(componentSpecs,stepConditions,var):
 
     R_inter = componentSpecs["R_inter"]
 
-    R_b = componentSpecs["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
     h_fluid = var["h_fluid"]
 
     T_sky = stepConditions["T_sky"]
@@ -762,10 +749,10 @@ def KTE_Bt(componentSpecs,stepConditions,var):
 
     # T_B - T_back
     h5 = 0.
-    h4 = (-iota/R_b)*b4
-    h3 = (iota/R_b)*(1-b3)
-    h2 = (-iota/R_b)*b2
-    h1 = (-iota/R_b)*b1
+    h4 = (-iota/R_abs_back)*b4
+    h3 = (iota/R_abs_back)*(1-b3)
+    h2 = (-iota/R_abs_back)*b2
+    h1 = (-iota/R_abs_back)*b1
 
     # 2q'_absfin
     i5 = 2*k_abs*lambd_abs*m*math.tanh(m*L_af)*(b/j)
@@ -786,15 +773,15 @@ def KTE_tf(componentSpecs,stepConditions,var):
     """Calculates Ka_tf, Th_tf, and Ep_tf factors and stores them in var["Ka_tf"], var["Th_tf"], and var["Ep_tf"]
 
     $$
-    \kappa_{tf} = \frac{d_2}{\chi R_B} + \frac{d_0}{\chi^2} - \frac{1}{\chi}
+    \kappa_{tf} = \frac{d_2}{\chi R_{abs-back} } + \frac{d_0}{\chi^2} - \frac{1}{\chi}
     $$
 
     $$
-    \theta_{tf} = 1 - \frac{d_1}{\chi R_B}
+    \theta_{tf} = 1 - \frac{d_1}{\chi R_{abs-back} }
     $$
 
     $$
-    \epsilon_{tf} = \frac{d_3}{\chi R_B}T_{back} + \frac{d_4}{\chi R_B}T_{sky} + \frac{d_1}{\chi R_B}T_{back} + \frac{d_0\gamma}{\chi}T_{back}
+    \epsilon_{tf} = \frac{d_3}{\chi R_{abs-back} }T_{back} + \frac{d_4}{\chi R_B}T_{sky} + \frac{d_1}{\chi R_B}T_{back} + \frac{d_0\gamma}{\chi}T_{back}
     $$
 
     Args:
@@ -909,97 +896,59 @@ def Bi_f3(componentSpecs,var):
     h_back = var["h_back_fins"]
     var["Bi_f3"] = bht.Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],h_back,componentSpecs["delta_f3"])
 
-def gamma0int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
-    """Calculates the gamma_0_int factor and returns it
-    
-    $$
-    \gamma_{0,int} = \frac{\alpha}{\lambda}\frac{\sinh(\alpha L_{fin}/\lambda)+\beta\alpha/\lambda\cosh(\alpha L_{fin}/\lambda)}{\cosh(\alpha L_{fin}/\lambda)+\beta\sinh(\alpha L_{fin}/\lambda)}
-    $$
-    
-    Args:
-        N (int): number of fins
-        L_fin (float): length of the fin
-        lambd (float): thickness of the fin
-        k (float): thermal conductivity of the fin
-        delta (float): width of the fin
-        delta_int (float): contact length between the fin and the tube
-        L_tube (float): length of the tube
-        h (float): heat transfer coefficient
-        
-    Returns:
-        Bi (float): Biot number
-        gamma_0_int (float): gamma_0_int factor"""
-    
-    Bi = bht.Biot(lambd,k,h,delta)
+def gammaPrime_f0(componentSpecs,var):
+    """Calculates the gammaPrime_f0 factor and stores it in var["gammaPrime_f0"]"""
 
-    alpha = math.sqrt(2*Bi)
-    beta = math.sqrt(Bi/2)*(1/(1+lambd/delta))
-    arg = (alpha*L_fin)/lambd
-
-    numerateur = (alpha/lambd)*math.sinh(arg) + ((beta*alpha)/lambd)*math.cosh(arg)
-    denominateur = math.cosh(arg) + beta*math.sinh(arg)
-
-    return Bi,k*(numerateur/denominateur)*((lambd*N*delta_int)/L_tube)
-
-def gamma_0_int(componentSpecs,var):
-    """Calculates the gamma_0_int factor and stores it in var["gamma_0_int"]"""
-
-    var["Bi_f0"],var["gamma_0_int"] = gamma0int(componentSpecs["N_f0"],componentSpecs["L_f0"],componentSpecs["lambd_ail"],componentSpecs["k_ail"],componentSpecs["delta_f0"],componentSpecs["delta_f0_int"],componentSpecs["L_tube"],var["h_back_fins"])
-
-def gamma1int(N,L_fin,lambd,k,delta,delta_int,L_tube,h):
-    """Calculates the gamma_1_int factor and returns it
-    
-    $$
-    \gamma_{1,int} = \frac{\alpha}{\lambda}\frac{\sinh(\alpha L_{fin}/\lambda)}{\cosh(\alpha L_{fin}/\lambda)}
-    $$
-    
-    Args:
-        N (int): number of fins
-        L_fin (float): length of the fin
-        lambd (float): thickness of the fin
-        k (float): thermal conductivity of the fin
-        delta (float): width of the fin
-        delta_int (float): contact length between the fin and the tube
-        L_tube (float): length of the tube
-        h (float): heat transfer coefficient
-        
-    Returns:
-        Bi (float): Biot number
-        gamma_1_int (float): gamma_1_int factor"""
-    
-    Bi = bht.Biot(lambd,k,h,delta)
-
-    return Bi,2*k*((lambd*N*delta_int)/L_tube)*math.tanh(math.sqrt(2*Bi)*(L_fin/lambd))*(math.sqrt(2*Bi)/lambd)
-
-def gamma_1_int(componentSpecs,var):
-
-    var["Bi_f1"],var["gamma_1_int"] = componentSpecs["coeff_f1"]*gamma1int(componentSpecs["N_f1"],componentSpecs["L_f1"],componentSpecs["lambd_ail"],componentSpecs["k_ail"],componentSpecs["delta_f1"],componentSpecs["delta_f1_int"],componentSpecs["L_tube"],var["h_back_fins"])
-
-def gamma_2_int(componentSpecs,var):
-
-    Bi = bht.Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],var["h_back_fins"],componentSpecs["delta_f2"])
-    var["Bi_f2"] = Bi
-    a = componentSpecs["lambd_ail"]
-    delta = componentSpecs["delta_f2"]
-
-    alpha = math.sqrt(2*Bi)
-    beta = math.sqrt(Bi/2)*(1/(1+a/delta))
-
-    L_a = componentSpecs["L_f2"]
-    N_ail = componentSpecs["N_f2"]
+    L_fin = componentSpecs["L_f0"]
+    lambd = componentSpecs["lambd_ail"]
+    A = (componentSpecs["delta_f0_int"] * lambd)
     k = componentSpecs["k_ail"]
+    delta = componentSpecs["delta_f0"]
+    h = var["h_back_fins"]
 
+    Bi = bht.Biot(lambd,k,h,delta)
+    var["Bi_f0"] = Bi
+    
+    N = componentSpecs["N_f0"]
     L_tube = componentSpecs["L_tube"]
 
-    arg = (alpha*L_a)/a
-    numerateur = (alpha/a)*math.sinh(arg) + ((beta*alpha)/a)*math.cosh(arg)
-    denominateur = math.cosh(arg) + beta*math.sinh(arg)
+    var["gammaPrime_f0"] = N * modfins.gamma_fin('free_end', L_fin, lambd, A, k, Bi) / L_tube
 
-    delta_f2 = componentSpecs["delta_f2"]
+def gammaPrime_f1(componentSpecs,var):
+
+    L_fin = componentSpecs["L_f1"]
+    lambd = componentSpecs["lambd_ail"]
+    A = (componentSpecs["delta_f1_int"] * lambd)
+    k = componentSpecs["k_ail"]
+    delta = componentSpecs["delta_f1"]
+    h = var["h_back_fins"]
+
+    Bi = bht.Biot(lambd,k,h,delta)
+    var["Bi_f1"] = Bi
     
-    gamma_int = k*(numerateur/denominateur)*((a*N_ail*delta_f2)/(L_tube*delta_f2))
+    N = componentSpecs["N_f1"]
+    L_tube = componentSpecs["L_tube"]
 
-    var["gamma_2_int"] = gamma_int
+    var["gammaPrime_f1"] = componentSpecs["coeff_f1"] * 2 * N * modfins.gamma_fin('adiabatic', L_fin, lambd, A, k, Bi) / L_tube
+
+def gamma_f2(componentSpecs,var):
+
+    L_fin = componentSpecs["L_f2"]
+    lambd = componentSpecs["lambd_ail"]
+    A = (componentSpecs["delta_f2"] * lambd) # delta_f2_int = delta_f2
+    k = componentSpecs["k_ail"]
+    delta = componentSpecs["delta_f2"]
+    h = var["h_back_fins"]
+
+    Bi = bht.Biot(lambd,k,h,delta)
+    var["Bi_f2"] = Bi
+    
+    N = componentSpecs["N_f2"]
+    L_tube = componentSpecs["L_tube"]
+
+    w_absfin = componentSpecs['W'] - componentSpecs['l_c']
+
+    var["gamma_f2"] = 2 * N * modfins.gamma_fin('free_end', L_fin, lambd, A, k, Bi) / (L_tube * w_absfin)
 
 # Main functions
 
@@ -1051,17 +1000,17 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
         None"""
 
     if componentSpecs["fin_0"] == 1:
-        gamma_0_int(componentSpecs,var)
+        gammaPrime_f0(componentSpecs,var)
     else:
-        var["gamma_0_int"] = 0
+        var["gammaPrime_f0"] = 0
     if componentSpecs["fin_1"] == 1:
-        gamma_1_int(componentSpecs,var)
+        gammaPrime_f1(componentSpecs,var)
     else:
-        var["gamma_1_int"] = 0
+        var["gammaPrime_f1"] = 0
     if componentSpecs["fin_2"] == 1:
-        gamma_2_int(componentSpecs,var)
+        gamma_f2(componentSpecs,var)
     else:
-        var["gamma_2_int"] = 0
+        var["gamma_f2"] = 0
     if componentSpecs["fin_3"] == 1:
         Bi_f3(componentSpecs,var)
     else:
@@ -1554,7 +1503,7 @@ def change_b_htop(componentSpecs,stepConditions,b_htop):
 
 def change_ins(componentSpecs,e_new,k_new):
 
-    componentSpecs["R_2"]=e_new/k_new
+    componentSpecs["R_abs_ins"]=e_new/k_new
 
 def change_N_fins_per_EP(componentSpecs,N):
     componentSpecs["N_fins_on_abs"] = (6*N)/componentSpecs["N_harp"]
