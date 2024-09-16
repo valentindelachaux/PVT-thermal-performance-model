@@ -635,6 +635,127 @@ def get_data(plot_hyp, panelSpecs, hyp, stepConditions) :
         else : 
             raise ValueError('method should be either mesh, case or ref')
 
+def get_data_v2(plot_hyp, panelSpecs, hyp, stepConditions) : 
+
+    # code du mesh caoMeshCode
+    # code du testConditions (tC0)
+    # code de la méthode (bridge ou uniform)
+    # numéro du try
+    # numéro du case
+
+    #  with open(os.path.join(fp, f'{info_names[i-2]}.pkl'), 'wb') as f:
+       #     pickle.load(f)
+
+    # panelSpecs
+    # hyp
+    # stepConditions
+
+    # log
+
+    # Listes indicées par le numéro de la big_it
+    # df_one_per_part_list
+    # phis_list
+    # CFD_ht_list (qui est le résultat du process de all_ht) # Qdot_top_conv Qdot_top_rad Qdot_PV_sky (à aller chercher dans ht_tot) Qdot_tube_back_conv Qdot_tube_back_rad et le total Qdot_tube_fluid
+
+    method = plot_hyp['method']
+    nb_it = plot_hyp['nb_it']
+    folder_path	= plot_hyp['folder_path']
+    folder_mesh_base	= plot_hyp['folder_mesh']
+    folder_name_base = plot_hyp['folder_name']
+    new_save = plot_hyp['new_save']
+
+    if new_save == True :
+        if method == 'case' :
+            no_case = plot_hyp['no_case']
+            no_mesh = plot_hyp['no_mesh']
+
+            folder_mesh = folder_mesh_base+f'{no_mesh+1}'
+            folder_path_mesh = os.path.join(folder_path, folder_mesh)
+
+
+            # Si y a pas d'ailette :
+            # flat_1_conductif + flat_2_conductif = transfert total sur les flats
+            # Qdot_top_conv =  (pv_front conv)/(pv_front total) * (flat_1_conductif + flat_2_conductif) 
+            # Qdot_top_rad = (pv_front rad)/(pv_front total) * (flat_1_conductif + flat_2_conductif)
+
+            # Pareil pour tube_back
+
+            # Si y a des ailettes :
+
+            # Calculs inchangés pour Qdot_top_conv et Qdot_top_rad
+            # Calculs inchangés pour tout sauf parT3 et part5
+
+            # Pour tube_back pour les parties 3 et 5 : 
+            # Qdot_tube_back FLATS (hx_flat_yd_air) = somme sur les reports
+
+            # radiatif total de hx_flat_yd_air = (radiatif de toutes les ailettes en contact avec hx_flat_yd_air) + (radiatif de hx_flat_yd_air)
+            # (convectif hx_flat_yd_air parties exposées directement) = (total hx_flat_yd_air - (radiatif total hx_flat_yd_air) - total ailettes)
+            # convectif ailettes = (total ailettes - radiatif ailettes)
+            # convectif total = (convectif hx_flat_yd_air parties exposées directement) + convectif ailettes
+            # radiatif total = total - (convectif total)
+
+            ht_list = []
+            CFD_list = []
+            df_one_list = []
+            slices_df_list = []
+            PyFluent_list = []
+
+            folder_name = folder_name_base+f'{no_case}'
+            folder_path_case = os.path.join(folder_path_mesh, folder_name)
+
+            hyp['CFD_ht_path'] = os.path.join(folder_path_case, 'test')
+
+            for iteration in range(nb_it) :
+                file_path_result_CFD = hyp['CFD_ht_path']+f'_{iteration}.csv' 
+                file_path_df_one = hyp['CFD_ht_path']+'_df_one' + f'_{iteration}.csv'
+                file_path_slices_df = hyp['CFD_ht_path']+'_slices_df' + f'_{iteration}.csv'
+                file_path_Inputs_PyFluent = hyp['CFD_ht_path']+'_PyFluent' + f'_{iteration}.csv'
+
+                df_PyFluent = pd.read_csv(file_path_Inputs_PyFluent, sep=';')
+                df_PyFluent['iteration'] = iteration
+                PyFluent_list.append(df_PyFluent)
+
+                nb_hx = int(apb.get_value('nb_hx', 'named_expression', df_PyFluent))
+
+                ht = pd.read_csv(os.path.join(folder_path_case,f'all_ht_report_{iteration}.csv'), sep=',')
+                ht['iteration'] = iteration
+                ht_list.append(ht)
+
+                df_CFD = pd.read_csv(file_path_result_CFD, sep=';')
+                df_CFD['iteration'] = iteration
+                df_CFD.index = [f'part{i}' for i in range(1, nb_hx+3)]
+                CFD_list.append(df_CFD)
+
+                df_one = pd.read_csv(file_path_df_one, sep=';')
+                df_one['iteration'] = iteration
+                df_one.index = [f'part{i}' for i in range(1, nb_hx+3)]
+                df_one_list.append(df_one)
+
+                slices_df = pd.read_csv(file_path_slices_df, sep=';')
+                slices_df['iteration'] = iteration
+                slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
+                slices_df_list.append(slices_df)
+
+            file_path_df_one = hyp['CFD_ht_path']+'_df_one' + f'_{iteration+1}.csv'
+            file_path_slices_df = hyp['CFD_ht_path']+'_slices_df' + f'_{iteration+1}.csv'
+
+            df_one = pd.read_csv(file_path_df_one, sep=';')
+            df_one['iteration'] = iteration+1
+            df_one.index = [f'part{i}' for i in range(1, nb_hx+3)]
+            df_one_list.append(df_one)
+
+            slices_df = pd.read_csv(file_path_slices_df, sep=';')
+            slices_df['iteration'] = iteration+1
+            slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
+            slices_df_list.append(slices_df)
+            
+            return(ht_list, CFD_list, df_one_list, slices_df_list, PyFluent_list)
+        
+        elif method == 'mesh' :
+
+        else : 
+            'method should be either mesh or case'
+
 def extract_surface_integrals(surface_name, file_path):
     with open(file_path, 'r') as file:
         lines = file.readlines()
@@ -851,6 +972,76 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
     else : 
         raise ValueError('method should be either mesh, case or ref')
 
+def calculate_Qdot_v2(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0):
+    parts_tube_back = [
+        ['manifold_yu'],
+        ['hx_bend_yu_air', 'hx_bend_yu_pv'],
+        ['hx_flat_yu_air'],
+        ['hx_bend_mid_air', 'hx_bend_mid_pv'],
+        ['hx_flat_yd_air'],
+        ['hx_bend_yd_air', 'hx_bend_yd_pv'],
+        ['manifold_yd']
+    ]
+
+    parts_top = [
+        [],
+        [],
+        ['hx_flat_yu_pv-pv_backsheet-cd-cd1-pv-corps'],
+        [],
+        ['hx_flat_yd_pv-pv_backsheet-cd-cd1-pv-corps'],
+        [],
+        []
+    ]
+
+    parts_tube_fluid = [
+        ['manifold_yu'],
+        ['hx_bend_yu_air', 'hx_bend_yu_pv'],
+        ['hx_flat_yu_air', 'hx_flat_yu_pv-pv_backsheet-cd-cd1-pv-corps'],
+        ['hx_bend_mid_air', 'hx_bend_mid_pv'],
+        ['hx_flat_yd_air', 'hx_flat_yd_pv-pv_backsheet-cd-cd1-pv-corps'],
+        ['hx_bend_yd_air', 'hx_bend_yd_pv'],
+        ['manifold_yd']
+    ]
+
+    PV = ['pv_front', 'pv_backsheet']
+
+    method = plot_hyp['method']
+    nb_it = plot_hyp['nb_it']
+
+    if method == 'case':
+        no_case = plot_hyp['no_case']
+        no_mesh = plot_hyp['no_mesh']
+
+        ht_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data_v2(plot_hyp, panelSpecs, hyp, stepConditions)
+        nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
+
+        ht = ht_list[iteration]
+
+        Qdot_tube_back = []
+        Qdot_top = []
+        Qdot_top_rad = []
+        Qdot_tube_fluid = []
+        Qdot_PV_sky = []
+
+        for i in range(1, nb_hx + 3):
+            if i == 3 or i == 5:
+                Qdot_tube_back.append(4.75 * ht[ht['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
+                Qdot_tube_fluid.append(-4.75 * ht[ht['Component'].isin(parts_tube_fluid[i - 1])]['ht'].sum())
+                Qdot_top.append(4.75 * ht[ht['Component'].isin(parts_top[i - 1])]['ht'].sum())
+                Qdot_top_rad.append(1e-6)
+
+                Qdot_PV_sky.append(
+                    - ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
+                )
+            else:
+                Qdot_tube_back.append(4.75 * ht[ht['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
+                Qdot_tube_fluid.append(-4.75 * ht[ht['Component'].isin(parts_tube_fluid[i - 1])]['ht'].sum())
+                Qdot_top.append(1e-6)
+                Qdot_top_rad.append(1e-6)
+                Qdot_PV_sky.append(1e-6)
+
+        return Qdot_tube_fluid, Qdot_top, Qdot_top_rad, Qdot_tube_back, Qdot_PV_sky
+
 def rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0) :
     method = plot_hyp['method']
     nb_it = plot_hyp['nb_it']
@@ -909,6 +1100,39 @@ def rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
         ratio_conv_uniform = conv_part/(tot_part)
 
         return ratio_rad_AR, ratio_conv_AR, ratio_rad_uniform, ratio_conv_uniform
+
+def rad_conv_ratio_v2(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0) :
+    method = plot_hyp['method']
+    nb_it = plot_hyp['nb_it']
+
+    if method == 'case':
+        no_case = plot_hyp['no_case']
+        no_mesh = plot_hyp['no_mesh']
+
+        ht_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+        nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
+
+        ht = ht_list[iteration]
+        tot_part= ht[ht['Component'].isin(['pv_front']) ]['ht'].values[0]
+        rad_part = ht[ht['Component'].isin(['pv_front']) ]['rad_ht'].values[0]
+        conv_part = ht[ht['Component'].isin(['pv_front']) ]['conv_ht'].values[0]
+        ratio_rad = rad_part/(tot_part)
+        ratio_conv = conv_part/(tot_part)
+
+        return ratio_rad, ratio_conv
+    
+    elif method == 'mesh' :
+        method = 'case'
+        ratio_rad_list = []
+        ratio_conv_list = []
+        for mesh in range(nb_mesh):
+            for case in range(nb_cases):
+                ratio_rad, ratio_conv = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh, case, iteration)
+                ratio_rad_list.append(ratio_rad)
+                ratio_conv_list.append(ratio_conv)
+        return ratio_rad_list, ratio_conv_list
+    else : 
+        raise ValueError('method should be either mesh or case')
 
 def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
         method = plot_hyp['method']

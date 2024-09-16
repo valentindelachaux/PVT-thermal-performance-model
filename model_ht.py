@@ -1,3 +1,4 @@
+import os
 import math
 import copy
 import pandas as pd
@@ -68,11 +69,11 @@ def h_fluid(componentSpecs,stepConditions,var,hyp):
 
 def get_CFD_value(componentSpecs, stepConditions, var, hyp, h, phi, T_1, T_2):
     big_it = hyp['big_it']
-    CFD_ht = pd.read_csv(hyp['CFD_ht_path']+f'_{big_it}.csv',sep=';', encoding='utf-8')
+    CFD_ht = pd.read_csv(os.path.join(hyp['CFD_ht_path'],f'phis_{big_it}.csv'), encoding='utf-8', sep=';', index_col=0)
     if abs(var[T_1] - stepConditions[T_2]) < 0.1 :
         var[h] = 0.1
     else :
-        var[h] = abs( CFD_ht.loc[CFD_ht['component'] == componentSpecs['name']][phi].values[0] / (var[T_1] - stepConditions[T_2]) )
+        var[h] = abs( CFD_ht.loc[componentSpecs['name'], phi] / (var[T_1] - stepConditions[T_2]) )
 
 # EXTERNAL CONVECTIVE
 

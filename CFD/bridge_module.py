@@ -7,6 +7,7 @@ import math
 from datetime import datetime
 from io import StringIO
 
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ import matplotlib.ticker as mtick
 from matplotlib.cm import get_cmap
 import time
 
+import model_ht as modht
 
 # sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\parallel-flow-distribution-pressure-loss\ansys')
 sys.path.append(r'G:\Mon Drive\GitHub\PVT-thermal-performance-model')
@@ -37,7 +39,7 @@ sys.path.append(r'G:\Mon Drive\GitHub\PVT-PL-model\ansys')
 
 import jou_gen as jg
 import ansys_py_bridge as apb
-# import ansys.fluent.core as pyfluent
+import ansys.fluent.core as pyfluent
 import model as ty
 import proc as pr
 import plot_functions_here as pfun
@@ -48,12 +50,31 @@ import general as gen
 
 ## Fonctions
 
-def init_hyp(hypotheses_path, stepConditions) :
+def check_folder(fp):
+    if not os.path.exists(fp):
+        os.makedirs(fp)
+    return fp
+
+def create_Inputs_fp(SR_caoMesh_fp, testConditionsCode, method):
+
+    i = 0
+    Inputs_fp = os.path.join(SR_caoMesh_fp, f'{testConditionsCode}_{method}_try{i}_Inputs')
+
+    while os.path.exists(Inputs_fp):
+        i += 1
+        Inputs_fp = os.path.join(SR_caoMesh_fp, f"{testConditionsCode}_{method}_try{i}_Inputs")
+    os.makedirs(Inputs_fp)
+
+    return Inputs_fp, i
+
+def import_inputs(geometry_path, hypotheses_path, testConditions_path, Inputs_PyFluent_path) :
+     
+    panelSpecs = pr.import_geometry(geometry_path)
     hyp = pr.create_dict_from_excel(hypotheses_path,'Main')
-    big_it = hyp['big_it']
-    T_amb = stepConditions['T_amb']
-    T_fluid_in0 = stepConditions['T_fluid_in0']
-    return hyp, big_it, T_amb, T_fluid_in0
+    steadyStateConditions_df = pd.read_excel(testConditions_path,header=2)
+    Inputs_PyFluent = read_Inputs_PyFluent(Inputs_PyFluent_path)
+
+    return panelSpecs, hyp, steadyStateConditions_df, Inputs_PyFluent
 
 def read_Inputs_PyFluent(Inputs_PyFluent_path):
     Inputs_PyFluent = pd.read_excel(Inputs_PyFluent_path)
@@ -69,22 +90,23 @@ def create_folder_paths(folder_path, case, case_name = 'cas_') :
     return folder_path_geom
 
 def create_save_paths(hyp, folder_path_case, big_it):
-    hyp['CFD_ht_path'] = os.path.join(folder_path_case, 'test')
+    hyp['CFD_ht_path'] = folder_path_case
 
-    file_path_result_CFD = hyp['CFD_ht_path'] + f'_{big_it}.csv' ## On ne peut pas l'appeler autrement pour le moment, il y a un appel dans la fonction simu_on_steadyState
-    file_path_result_slices_df = hyp['CFD_ht_path'] + '_slices_df' + f'_{big_it}.csv'
-    file_path_result_df_one = hyp['CFD_ht_path'] + '_df_one' + f'_{big_it}.csv'
-    file_path_result_PyFluent = hyp['CFD_ht_path'] + '_PyFluent' + f'_{big_it}.csv'
+    file_path_result_CFD = os.path.join(hyp['CFD_ht_path'], f'phis_{big_it}.csv') ## On ne peut pas l'appeler autrement pour le moment, il y a un appel dans la fonction simu_on_steadyState
+    df_one_fp = os.path.join(hyp['CFD_ht_path'], f'df_one_{big_it}.csv')
+    df_one_per_part_fp = os.path.join(hyp['CFD_ht_path'], f'df_one_per_part_{big_it}.csv')
+    res_fp = os.path.join(hyp['CFD_ht_path'], f'res_{big_it}.xlsx')
+    file_path_result_PyFluent = os.path.join(hyp['CFD_ht_path'], f'PyFluent_{big_it}.csv')
 
-    return file_path_result_CFD, file_path_result_PyFluent, file_path_result_df_one, file_path_result_slices_df
+    return file_path_result_CFD, file_path_result_PyFluent, df_one_per_part_fp, df_one_fp, res_fp
 
-def init_mesh(tui, geometries_dict, geom) :
-    geom_path = geometries_dict['mesh_path'].iloc[geom]
-    geom_name = geometries_dict['mesh_name_wo_ext'].iloc[geom]
-    jg.change_mesh(tui, geom_path, geom_name)
-    jg.create_radiation(tui, geom_name)
+def init_mesh(tui, Mesh_fp, S2S_fp, caoMeshName) :
+    caoMeshCode = caoMeshName.split('__')[0]
 
-def init_solver(folder_path_ansys, server_code):
+    jg.change_mesh(tui, Mesh_fp, caoMeshName)
+    read_or_create_radiation(tui, S2S_fp, caoMeshCode)
+
+def init_solver(fp, server_code):
     """Initialize the tui and solver objectfs for PyFluent
     
     Args:
@@ -96,98 +118,142 @@ def init_solver(folder_path_ansys, server_code):
         solver (object): Solver object
     """
 
-    solver_path = folder_path_ansys + '\server\\' + f'server_info-{server_code}.txt'
+    solver_path = os.path.join(fp, 'server', f'server_info-{server_code}.txt')
     solver = pyfluent.connect_to_fluent(server_info_file_name=solver_path)
     tui = solver.tui
     return tui, solver
 
 def modify_invariable(tui, Inputs_PyFluent):
-    theta = apb.get_value('theta', 'named_expression', Inputs_PyFluent)
+    theta = Inputs_PyFluent.loc['theta', 'value']
     jg.change_gravity(tui, theta)
+    T_amb = Inputs_PyFluent.loc['T_amb', 'value']
     jg.change_named_expression(tui, 'T_amb', T_amb, 'K')
 
-def fill_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0) :
+def import_1Dresults_into_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0, method='bridge') :
 
     nb_hx = int(Inputs_PyFluent.loc['nb_hx','value'])
 
     Inputs_PyFluent.loc['T_fluid_in_man', 'value'] = T_fluid_in0
 
     e_PV = Inputs_PyFluent.loc['e_PV','value'] # m
-    L_PV = Inputs_PyFluent.loc['L_PV','value'] # mm
-    w_PV = Inputs_PyFluent.loc['w_PV','value'] # mm
+    L_PV = Inputs_PyFluent.loc['L_PV','value'] # m
+    w_PV = Inputs_PyFluent.loc['w_PV','value'] # m
 
-    volume_PV = L_PV * w_PV * e_PV * 1e-6
+    volume_PV = L_PV * w_PV * e_PV
 
     Inputs_PyFluent.loc['Heat_Generation_Rate', 'value'] = - df_one['Qdot_PV_sky'].values[0]/volume_PV
 
-    for i in range(1, nb_hx + 1):
-        Inputs_PyFluent.loc[f'a_f_{i}', 'value'] = res[f'part{i}']['slices_df']['a_f'].values[0]
-        Inputs_PyFluent.loc[f'b_f_{i}', 'value'] = res[f'part{i}']['slices_df']['b_f'].values[0]
+    if method == 'bridge':
+
+        for i in range(1, nb_hx + 1) :      
+            Inputs_PyFluent.loc[f'T_fluid_in_{i}', 'value'] = res[f'part{i+1}']['df_one']['T_fluid_in'].loc[0]
+            Inputs_PyFluent.loc[f'a_f_{i}', 'value'] = res[f'part{i}']['slices_df']['a_f'].values[0]
+            Inputs_PyFluent.loc[f'b_f_{i}', 'value'] = res[f'part{i}']['slices_df']['b_f'].values[0]
+
+        Inputs_PyFluent.loc['T_fluid_in_man', 'value'] = res['part1']['df_one']['T_fluid_mean'].loc[0]
+        Inputs_PyFluent.loc['T_fluid_out_man', 'value'] = res['part7']['df_one']['T_fluid_mean'].loc[0]
+
+    elif method == 'uniform':
+            
+        for i in range(1, nb_hx + 1) :        
+
+            Inputs_PyFluent.loc[f'T_fluid_in_{i}', 'value'] = T_fluid_in0
+            Inputs_PyFluent.loc[f'a_f_{i}', 'value'] = 1e-15
+            Inputs_PyFluent.loc[f'b_f_{i}', 'value'] = 0.
+
+        Inputs_PyFluent.loc['T_fluid_in_man', 'value'] = T_fluid_in0
+        Inputs_PyFluent.loc['T_fluid_out_man', 'value'] = T_fluid_in0
     
-def init_ANSYS_parameters(tui, Inputs_PyFluent) :
-    for i, named_expression in enumerate(Inputs_PyFluent):
-        value = Inputs_PyFluent.loc['named_expression', 'value']
-        unit = Inputs_PyFluent.loc['named_expression', 'unit']
-        jg.change_named_expression(tui, named_expression, value, unit)
+def import_Inputs_PyFluent_to_FluentCase(tui, Inputs_PyFluent, method = 'init') :
+
+    if method == 'init':
+
+        for named_expression in Inputs_PyFluent.index :
+            value = Inputs_PyFluent.loc[named_expression, 'value']
+            unit = Inputs_PyFluent.loc[named_expression, 'unit']
+            jg.change_named_expression(tui, named_expression, value, unit)
+
+    elif method == 'update':
+
+        nb_hx = int(Inputs_PyFluent.loc['nb_hx','value'])
+        for part in range(1, nb_hx + 1):
+            jg.change_named_expression(tui, f'T_fluid_in_{part}', Inputs_PyFluent.loc[f'T_fluid_in_{part}', 'value'], 'K')
+            jg.change_named_expression(tui, f'a_f_{part}', Inputs_PyFluent.loc[f'a_f_{part}', 'value'], 'm^-1')
+            jg.change_named_expression(tui, f'b_f_{part}', Inputs_PyFluent.loc[f'b_f_{part}', 'value'], 'K m^-1')
+
+        jg.change_named_expression(tui, 'Heat_Generation_Rate', Inputs_PyFluent.loc['Heat_Generation_Rate', 'value'], 'W/m^3')
+        jg.change_named_expression(tui, 'T_fluid_in_man', Inputs_PyFluent.loc['T_fluid_in_man', 'value'], 'K')
+        jg.change_named_expression(tui, 'T_fluid_out_man', Inputs_PyFluent.loc['T_fluid_out_man', 'value'], 'K')
+
+    else:
+        raise ValueError('method must be either init or update')
+
+def replace_keys_in_dict(original_dict, key_mapping):
+
+    return {key_mapping.get(old_key, old_key): value for old_key, value in original_dict.items()}
+
+def write_excel_from_dict(dict_of_dataframes, file_name):
+    """
+    Writes an Excel file with multiple sheets from a dictionary.
     
-def fill_temperature(Inputs_PyFluent, res) :
-    nb_hx = int(Inputs_PyFluent.loc['nb_hx','value'])
-    
-    for i in range(2, nb_hx+2) :        
+    Args:
+    - file_name: Name of the Excel file to be created (including .xlsx extension).
+    - dict_of_dataframes: A dictionary where keys are sheet names and values are Pandas DataFrames.
+    """
 
-        Inputs_PyFluent.loc[f'T_fluid_in_{i-1}', 'value'] = res[f'part{i}']['df_one']['T_fluid_in'].loc[0]
+    with pd.ExcelWriter(file_name, engine='openpyxl') as writer:
+        for sheet_name, df in dict_of_dataframes.items():
+            df.to_excel(writer, sheet_name=sheet_name, index=True)
 
-    Inputs_PyFluent.loc['T_fluid_in_man', 'value'] = res['part1']['df_one']['T_fluid_mean'].loc[0]
-    Inputs_PyFluent.loc['T_fluid_out_man', 'value'] = res['part7']['df_one']['T_fluid_mean'].loc[0]
+def write_res_to_excel(res, res_fp, df_one_per_part_fp):
 
+    res_for_excel = {}
 
-def save_simu_1D(res, nb_hx, file_path_result_df_one, file_path_result_slices_df) :
-        keys = list(res['part1']['df_one'].keys())
-        values_dict = {key: [] for key in keys}
+    for part in res.keys():
+        res_for_excel[f'{part}_slices_df'] = res[part]['slices_df']
 
-        for i in range(1, nb_hx+3):
-            part_key = f'part{i}'
-            if part_key in res:
-                for key in keys:
-                    values_dict[key].append(res[part_key]['df_one'][key].values[0])
+    write_excel_from_dict(res_for_excel, res_fp)
 
-        result_1D_df_one = pd.DataFrame(values_dict)
+    df_one_per_part = pd.concat([res[part]['df_one'] for part in res.keys() if part!='main'], axis=0)
+    df_one_per_part.index = [f'part{i}' for i in range(1, len(df_one_per_part) + 1)]
 
-        result_1D_df_one.index = [f'part{i}' for i in range(1, nb_hx + 3)]
-        result_1D_df_one.to_csv(file_path_result_df_one,sep=';', index=False)
+    df_one_per_part.to_csv(df_one_per_part_fp, sep=';')
 
-        keys = list(res['part1']['slices_df'].keys())
-        values_dict = {key: [] for key in keys}
+def save_simu_1D(df_one, res, df_one_fp, res_fp, df_one_per_part_fp) :
 
-        for part in range(1, nb_hx+3):
-            part_key = f'part{part}'
-            if part_key in res:
-                for key in keys:
-                    values_dict[key].append(res[part_key]['slices_df'][key].values[0])
+    df_one.to_csv(df_one_fp, sep = ";")
+    write_res_to_excel(res, res_fp, df_one_per_part_fp)
 
-        result_1D_slices_df = pd.DataFrame(values_dict)
-        result_1D_slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
-        result_1D_slices_df.to_csv(file_path_result_slices_df,sep=';', index=False)
+        # keys = list(res['part1']['df_one'].keys())
+        # values_dict = {key: [] for key in keys}
 
-def change_ANSYS_parameters(tui, Inputs_PyFluent):
-        nb_hx = int(apb.get_value('nb_hx', 'named_expression', Inputs_PyFluent))
-        for part in range(1, nb_hx+1):
-            T_fluid_in = apb.get_value(f'T_fluid_in_{part}', 'named_expression', Inputs_PyFluent)
-            a_f = apb.get_value(f'a_f_{part}', 'named_expression', Inputs_PyFluent)
-            b_f = apb.get_value(f'b_f_{part}', 'named_expression', Inputs_PyFluent)
-            jg.change_named_expression(tui, f'T_fluid_in_{part}', T_fluid_in, 'K')
-            jg.change_named_expression(tui, f'a_f_{part}', a_f, 'm^-1')
-            jg.change_named_expression(tui, f'b_f_{part}', b_f, 'K m^-1')
-        Heat_Generation_Rate=apb.get_value('Heat_Generation_Rate', 'named_expression', Inputs_PyFluent)
-        jg.change_named_expression(tui, 'Heat_Generation_Rate', Heat_Generation_Rate, 'W/m^3')
-        T_fluid_in_man=apb.get_value('T_fluid_in_man', 'named_expression', Inputs_PyFluent)
-        jg.change_named_expression(tui, 'T_fluid_in_man',T_fluid_in_man, 'K')
-        T_fluid_out_man=apb.get_value('T_fluid_out_man', 'named_expression', Inputs_PyFluent)
-        jg.change_named_expression(tui, 'T_fluid_out_man', T_fluid_out_man, 'K')
+        # for i in range(1, nb_hx+3):
+        #     part_key = f'part{i}'
+        #     if part_key in res:
+        #         for key in keys:
+        #             values_dict[key].append(res[part_key]['df_one'][key].values[0])
+
+        # result_1D_df_one = pd.DataFrame(values_dict)
+
+        # result_1D_df_one.index = [f'part{i}' for i in range(1, nb_hx + 3)]
+        # result_1D_df_one.to_csv(df_one_fp, sep=';')
+
+        # keys = list(res['part1']['slices_df'].keys())
+        # values_dict = {key: [] for key in keys}
+
+        # for part in range(1, nb_hx+3):
+        #     part_key = f'part{part}'
+        #     if part_key in res:
+        #         for key in keys:
+        #             values_dict[key].append(res[part_key]['slices_df'][key].values[0])
+
+        # result_1D_slices_df = pd.DataFrame(values_dict)
+        # result_1D_slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
+        # result_1D_slices_df
 
 def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, big_it) :
         
-        nb_hx = int(Inputs_PyFluent['nb_hx'])
+        nb_hx = int(Inputs_PyFluent.loc['nb_hx', 'value'])
 
         jg.write_report(tui,'ht',folder_path_case,f'ht_tot_report_{big_it}')
         jg.write_report(tui,'rad_ht',folder_path_case,f'ht_rad_report_{big_it}')
@@ -199,7 +265,7 @@ def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_re
         Qdot['conv_ht'] = Qdot['ht'] - Qdot['rad_ht']
         Qdot.set_index('Component', inplace=True)
 
-        Qdot.to_csv(os.path.join(folder_path_case,f'all_ht_report_{big_it}.csv'))
+        Qdot.to_csv(os.path.join(folder_path_case,f'all_ht_report_{big_it}.csv'), sep=';')
 
         parts_tube_back = [
             ['manifold_yu'],
@@ -239,8 +305,8 @@ def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_re
         Qdot_tube_fluid = []
         Qdot_PV_sky = []
 
-        phi = pd.read_csv(r"G:\Drive partagés\Cercle Hard\R&D\Modèles numériques PVT\PVT-perf-1Dmodel\CFD\test\phi_template.csv", sep=";")
-        phi.set_index('component', inplace=True)
+        phi = pd.read_csv(r"D:\ANSYS Fluent Projects\pvt_slice_outdoor\Fluent_GMI\tests\phis_template.csv", sep=";")
+        phi.set_index('Component', inplace=True)
 
         Areas_top = [ pr.top_area_tube_contact_PV(panelSpecs[part])/4.75 for part in panelSpecs['decomp'].keys() if part != 'main']
         Areas_back = [ pr.back_area_tube_conv_and_rad(panelSpecs[part])/4.75 for part in panelSpecs['decomp'].keys() if part != 'main']
@@ -248,74 +314,92 @@ def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_re
         for i in range(1, nb_hx + 3):
             if i == 3 or i == 5:
 
-                phi.loc[f'part{i}', 'phi_tube'] = Qdot[Qdot.index.isin(parts_tube_back[i - 1])]['ht'].sum() / Areas_top[i - 1]
+                phi.loc[f'part{i}', 'phi_tube'] = Qdot[Qdot.index.isin(parts_tube_back[i - 1])]['ht'].sum() / Areas_back[i - 1]
 
                 phi.loc[f'part{i}', 'phi_top'] = Qdot[Qdot.index.isin(parts_top[i - 1])]['ht'].sum() / Areas_top[i - 1] if i in [3,5] else 1e-10
 
-                phi.loc[f'part{i}', 'phi_abs'] = 1e-6
+                phi.loc[f'part{i}', 'phi_abs'] = 1e-10
         
-        phi.to_csv(file_path_result_CFD)
-
-def save_Pyfluents(Inputs_PyFluent, file_path_result_PyFluent) :
-    Inputs_PyFluent.to_csv(file_path_result_PyFluent,sep=';', index=False)
-
-def increment_big_it(hyp, big_it) :
-        big_it = big_it + 1
-        hyp['big_it'] = big_it
-        file_path_result_CFD = hyp['CFD_ht_path']+f'_{big_it}.csv' ## On ne peut pas l'appeler autrement pour le moment, il y a un appel dans la fonction simu_on_steadyState
-        file_path_result_slices_df = hyp['CFD_ht_path']+'_slices_df' + f'_{big_it}.csv'
-        file_path_result_df_one = hyp['CFD_ht_path']+'_df_one' + f'_{big_it}.csv'
-        file_path_result_PyFluent = hyp['CFD_ht_path']+'_PyFluent' + f'_{big_it}.csv'
-        return file_path_result_CFD, file_path_result_PyFluent, file_path_result_df_one, file_path_result_slices_df
+        phi.to_csv(file_path_result_CFD, sep=';', index=True)
 
 def write_files(tui, folder_path_case, case, big_it) :
         jg.write_data(tui, folder_path_case, f'cas{case}_it{big_it}')
         jg.write_residuals_file(tui, folder_path_case, f'residuals_cas{case}_it{big_it}')
         jg.write_case(tui, folder_path_case, f'cas{case}_it{big_it}')
         jg.compute_mass_flow_rate(tui, 'face-inlet-under-panel', folder_path_case, f'mass_flow_rate_cas{case}_it{big_it}')
-        jg.compute_temp_avg(tui, 'face-oulet-under-panel', folder_path_case, f'temp_outlet_cas{case}_it{big_it}')
+        jg.compute_temp_avg(tui, 'face-outlet-under-panel', folder_path_case, f'temp_outlet_cas{case}_it{big_it}')
 
+def copy_inputs(Inputs, fp):
 
-def simu_bridge_cases(tui, solver, folder_path, hypotheses_path, panelSpecs, Inputs_PyFluent, steadyStateConditions_dict, nb_it = 50, nb_big_it = 5, T_out_diff_convergence_control = 0.05, method = 'bridge'):
+    info_names = ['panelSpecs', 'Model_hypotheses', 'steadyStateConditions_dict', 'Inputs_PyFluent']
 
-    log_df = pd.DataFrame(columns=['iteration', 'time', 'log'])
+    for i, info in enumerate(Inputs):
+        if i >= 2:
+            with open(os.path.join(fp, f'{info_names[i-2]}.pkl'), 'wb') as f:
+                pickle.dump(info, f)
+
+def read_or_create_radiation(tui, S2S_fp, caoMeshCode):
+    target_fp = os.path.join(S2S_fp, f'{caoMeshCode}.s2s.h5')
+    if not os.path.exists(target_fp):
+        jg.create_radiation(tui, S2S_fp, caoMeshCode)
+    else:
+        jg.read_radiation(tui, S2S_fp, caoMeshCode)
+
+def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 5, T_out_diff_convergence_control = 0.05, method = 'bridge'):
+
+    caoMeshCode, testConditionsCode, panelSpecs, hyp, steadyStateConditions_dict, Inputs_PyFluent = Inputs
+
+    SR_caoMesh_fp = check_folder(folder_path + '\\SimulationResults\\' + caoMeshCode)
+
     nb_case = len(steadyStateConditions_dict)
     nb_hx = int(Inputs_PyFluent.loc['nb_hx','value'])
 
+    Inputs_fp, i_try = create_Inputs_fp(SR_caoMesh_fp, testConditionsCode,method)
+
     for case in range(nb_case):
 
-        stepConditions = steadyStateConditions_dict[case]
+        folder_path_case = check_folder( os.path.join(SR_caoMesh_fp, f"{testConditionsCode}_{method}_try{i_try}_case{case}") )
 
-        if stepConditions['u'] > 0:
+        if case == 0:
+            copy_inputs(Inputs, Inputs_fp)
+
+        log_df = pd.DataFrame(columns=['iteration', 'time', 'log', 'errors'])
+
+        now = datetime.now().strftime("%Y-%m-%d %H-%M")
+        with open(os.path.join(folder_path_case, f'{now}.txt'), 'w') as f:
+            pass
+
+        stepConditions = steadyStateConditions_dict[case].copy()
+
+        if stepConditions['u'] >= 0.1:
             bc_to_init = "cd2_wind"
             c = stepConditions['u']
         else:
             bc_to_init = "cd_fc"
-            c = 0.01
+            # c = bht.speed_natural_convection(stepConditions['T_fluid_in0'], stepConditions['T_amb'], math.radians(45), Inputs_PyFluent.loc['L_PV', 'value'])
+            c = 0.1
 
         T_out_init = 0.
 
-        hyp, big_it, T_amb, T_fluid_in0 = init_hyp(hypotheses_path, stepConditions)
+        hyp_case = hyp.copy()
+        big_it = hyp_case['big_it']
+        T_amb = stepConditions['T_amb']
+        T_fluid_in0 = stepConditions['T_fluid_in0']
         
-        folder_path_case = create_folder_paths(folder_path, case, case_name = 'cas_')
-        file_path_result_CFD, file_path_result_PyFluent, file_path_result_df_one, file_path_result_slices_df = create_save_paths(hyp, folder_path_case, big_it)
+        file_path_result_CFD, file_path_result_PyFluent, df_one_per_part_fp, df_one_fp, res_fp = create_save_paths(hyp_case, folder_path_case, big_it)
 
-        df_one, res = ty.simu_one_steady_state_all_he(panelSpecs, stepConditions[case], hyp)
+        df_one, res = ty.simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp_case)
         T_out = T_out_init
         T_out_init = df_one['T_fluid_out'].loc[0]
 
-        hyp['method_h_top_g_exchanger'] = 'CFD'
-        hyp['method_h_back_abs'] = 'CFD'
-        hyp['method_h_back_tube'] = 'CFD'
-        hyp['method_h_rad_back_tube'] = 'CFD'
+        hyp_case['method_h_top_g_exchanger'] = 'CFD'
+        hyp_case['method_h_back_abs'] = 'CFD'
+        hyp_case['method_h_back_tube'] = 'CFD'
+        hyp_case['method_h_rad_back_tube'] = 'CFD'
 
-        fill_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0)
-        fill_temperature(Inputs_PyFluent, res)
+        import_1Dresults_into_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0, method)
 
-        init_ANSYS_parameters(tui, Inputs_PyFluent)
-    
-        if method == 'uniform':
-             Inputs_PyFluent.loc['T_fluid_in_1', 'value'] = T_fluid_in0
+        import_Inputs_PyFluent_to_FluentCase(tui, Inputs_PyFluent, 'init')
 
         cy = c/np.sqrt(2)
         cz = - c/np.sqrt(2)
@@ -330,42 +414,46 @@ def simu_bridge_cases(tui, solver, folder_path, hypotheses_path, panelSpecs, Inp
             time_start = time.time()
 
             # Save 1D
-            save_simu_1D(res, nb_hx, file_path_result_df_one, file_path_result_slices_df)
+            save_simu_1D(df_one, res, df_one_fp, res_fp, df_one_per_part_fp)
 
             # CFD
             solver.solution.run_calculation.iterate(number_of_iterations=nb_it)
             compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, big_it) # on remplit les phis
-            save_Pyfluents(Inputs_PyFluent, file_path_result_PyFluent) 
+            # copy for save Inputs_PyFluent
+            Inputs_PyFluent.to_csv(file_path_result_PyFluent, sep=';')
+
             write_files(tui, folder_path_case, case, big_it)
 
             try:
 
                 # 1D
-                df_one, res = ty.simu_one_steady_state_all_he(panelSpecs, stepConditions[case], hyp)
+                df_one, res = ty.simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp_case)
 
                 # On alimente la CFD
-                fill_Pyfluent(Inputs_PyFluent, res, T_fluid_in0, nb_hx)
-                fill_temperature(Inputs_PyFluent)
+                import_1Dresults_into_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0, method)
  
                 if big_it < nb_big_it - 1:
-                    change_ANSYS_parameters(tui, Inputs_PyFluent)
+                    import_Inputs_PyFluent_to_FluentCase(tui, Inputs_PyFluent, 'update')
 
-                increment_big_it(hyp, big_it)
+                big_it = big_it + 1
+                hyp_case['big_it'] = big_it
+                file_path_result_CFD, file_path_result_PyFluent, df_one_per_part_fp, df_one_fp, res_fp = create_save_paths(hyp_case, hyp_case['CFD_ht_path'], hyp_case['big_it'])
 
-            except:
+            except Exception as e:
+                print(e)
                 time_end = time.time()
-                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : f'1D model error at big it : {big_it}'}
+                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : f'1D model error at big it : {big_it}', 'errors': e}
                 break
 
             if abs(T_out-T_out_init)< T_out_diff_convergence_control:
                 time_end = time.time()
-                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : f'temperature profile converged at big it : {big_it}'}
-                save_simu_1D(res, nb_hx, file_path_result_df_one, file_path_result_slices_df)
+                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : f'temperature profile converged at big it : {big_it}', 'errors': 'None'}
+                save_simu_1D(df_one, res, df_one_fp, res_fp, df_one_per_part_fp)
 
                 break
 
             else:
                 time_end = time.time()
-                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : 'continue' if big_it < nb_big_it else 'big it limit reached'}
+                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : 'continue' if big_it < nb_big_it else 'big it limit reached', 'errors': 'None'}
 
-        log_df.to_csv(os.path.join(folder_path_case,f'log_cas_{case}.csv'))
+        log_df.to_csv(os.path.join(folder_path_case,f'log.csv'), sep=';')

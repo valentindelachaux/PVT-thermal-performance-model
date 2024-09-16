@@ -148,15 +148,12 @@ def ht_fins_forced_wiki2(L_fin,D,u):
   
 def speed_natural_convection(T_abs,T_amb,theta,L):
 
-    DT = T_abs - T_amb
     T_mean = (T_abs+T_amb)/2
 
     g = scc.g
-
-    beta = 1/T_mean     
-    Ra = Ra_L(T_abs,T_amb,theta,L)
-
-    speed = ((scc.g*beta*abs(DT)*L)/Ra)**(1/2)
+    beta = 1/T_mean 
+    DT = T_abs - T_amb    
+    nu = air_nu(T_mean)
 
     speed = np.sqrt((g*beta*DT*L)/nu)
 
