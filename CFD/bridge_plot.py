@@ -12,7 +12,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import plotly.express as px
+import plotly.colors as pc
 from scipy.stats import linregress
+from sklearn.linear_model import LinearRegression
 from numpy.polynomial.polynomial import Polynomial
 import scipy.integrate as integrate
 import scipy.optimize as sco
@@ -28,21 +30,70 @@ import openpyxl as opxl
 import matplotlib.ticker as mtick
 from matplotlib.cm import get_cmap
 import time
+import pickle
 
 sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\parallel-flow-distribution-pressure-loss\ansys')
 sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\PVT-thermal-performance-model')
-import jou_gen as jg
-import ansys_py_bridge as apb
-import ansys.fluent.core as pyfluent
-import model as ty
-import proc as pr
-import plot_functions_here as pfun
-import heat_transfer as bht
-import fluids as fds
-import ht
-import general as gen
+# import jou_gen as jg
+# import ansys_py_bridge as apb
+# import ansys.fluent.core as pyfluent
+# import model as ty
+# import proc as pr
+# import plot_functions_here as pfun
+# import heat_transfer as bht
+# import fluids as fds
+# import ht
+# import general as gen
 
 ## FUNCTIONS
+
+
+def extract_surface_integrals(surface_name, file_path):
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+    mass_flow_rate = None
+    for line in lines:
+        if surface_name in line:
+            parts = line.split()
+            mass_flow_rate = parts[-1]
+    return(float(mass_flow_rate))
+
+def extract_residuals(file_path):
+    with open(file_path, 'r') as file:
+        data = file.read()
+
+    # Utiliser une expression régulière pour capturer les tableaux avec différents labels
+    pattern = re.compile(r'\(\(xy/key/label "([^"]+)"\)\s+((?:\d+\s+[^\s]+\s*)+)\)')
+    tables = pattern.findall(data)
+    
+    result_tables = []
+
+    for label, table in tables:
+        # Séparer les lignes
+        lines = table.strip().split('\n')
+
+        # Extraire les valeurs
+        extracted_values = []
+        for line in lines:
+            parts = line.split()
+            if len(parts) == 2:
+                index, value = parts
+                extracted_values.append((int(index), float(value)))
+        
+        # Ajouter les valeurs extraites et le label dans une liste
+        result_tables.append((label, extracted_values))
+    
+    # Liste pour stocker les DataFrames
+    dataframes = []
+    
+    # Créer un DataFrame pour chaque table
+    for label, values in result_tables:
+            df = pd.DataFrame(values, columns=['Iteration', label])
+            df.set_index('Iteration', inplace=True)
+            dataframes.append(df)
+    return dataframes
+
+## Plus besoin de ces fontions
 def get_data(plot_hyp, panelSpecs, hyp, stepConditions) : 
     method = plot_hyp['method']
     nb_it = plot_hyp['nb_it']
@@ -635,172 +686,6 @@ def get_data(plot_hyp, panelSpecs, hyp, stepConditions) :
         else : 
             raise ValueError('method should be either mesh, case or ref')
 
-def get_data_v2(plot_hyp, panelSpecs, hyp, stepConditions) : 
-
-    # code du mesh caoMeshCode
-    # code du testConditions (tC0)
-    # code de la méthode (bridge ou uniform)
-    # numéro du try
-    # numéro du case
-
-    #  with open(os.path.join(fp, f'{info_names[i-2]}.pkl'), 'wb') as f:
-       #     pickle.load(f)
-
-    # panelSpecs
-    # hyp
-    # stepConditions
-
-    # log
-
-    # Listes indicées par le numéro de la big_it
-    # df_one_per_part_list
-    # phis_list
-    # CFD_ht_list (qui est le résultat du process de all_ht) # Qdot_top_conv Qdot_top_rad Qdot_PV_sky (à aller chercher dans ht_tot) Qdot_tube_back_conv Qdot_tube_back_rad et le total Qdot_tube_fluid
-
-    method = plot_hyp['method']
-    nb_it = plot_hyp['nb_it']
-    folder_path	= plot_hyp['folder_path']
-    folder_mesh_base	= plot_hyp['folder_mesh']
-    folder_name_base = plot_hyp['folder_name']
-    new_save = plot_hyp['new_save']
-
-    if new_save == True :
-        if method == 'case' :
-            no_case = plot_hyp['no_case']
-            no_mesh = plot_hyp['no_mesh']
-
-            folder_mesh = folder_mesh_base+f'{no_mesh+1}'
-            folder_path_mesh = os.path.join(folder_path, folder_mesh)
-
-
-            # Si y a pas d'ailette :
-            # flat_1_conductif + flat_2_conductif = transfert total sur les flats
-            # Qdot_top_conv =  (pv_front conv)/(pv_front total) * (flat_1_conductif + flat_2_conductif) 
-            # Qdot_top_rad = (pv_front rad)/(pv_front total) * (flat_1_conductif + flat_2_conductif)
-
-            # Pareil pour tube_back
-
-            # Si y a des ailettes :
-
-            # Calculs inchangés pour Qdot_top_conv et Qdot_top_rad
-            # Calculs inchangés pour tout sauf parT3 et part5
-
-            # Pour tube_back pour les parties 3 et 5 : 
-            # Qdot_tube_back FLATS (hx_flat_yd_air) = somme sur les reports
-
-            # radiatif total de hx_flat_yd_air = (radiatif de toutes les ailettes en contact avec hx_flat_yd_air) + (radiatif de hx_flat_yd_air)
-            # (convectif hx_flat_yd_air parties exposées directement) = (total hx_flat_yd_air - (radiatif total hx_flat_yd_air) - total ailettes)
-            # convectif ailettes = (total ailettes - radiatif ailettes)
-            # convectif total = (convectif hx_flat_yd_air parties exposées directement) + convectif ailettes
-            # radiatif total = total - (convectif total)
-
-            ht_list = []
-            CFD_list = []
-            df_one_list = []
-            slices_df_list = []
-            PyFluent_list = []
-
-            folder_name = folder_name_base+f'{no_case}'
-            folder_path_case = os.path.join(folder_path_mesh, folder_name)
-
-            hyp['CFD_ht_path'] = os.path.join(folder_path_case, 'test')
-
-            for iteration in range(nb_it) :
-                file_path_result_CFD = hyp['CFD_ht_path']+f'_{iteration}.csv' 
-                file_path_df_one = hyp['CFD_ht_path']+'_df_one' + f'_{iteration}.csv'
-                file_path_slices_df = hyp['CFD_ht_path']+'_slices_df' + f'_{iteration}.csv'
-                file_path_Inputs_PyFluent = hyp['CFD_ht_path']+'_PyFluent' + f'_{iteration}.csv'
-
-                df_PyFluent = pd.read_csv(file_path_Inputs_PyFluent, sep=';')
-                df_PyFluent['iteration'] = iteration
-                PyFluent_list.append(df_PyFluent)
-
-                nb_hx = int(apb.get_value('nb_hx', 'named_expression', df_PyFluent))
-
-                ht = pd.read_csv(os.path.join(folder_path_case,f'all_ht_report_{iteration}.csv'), sep=',')
-                ht['iteration'] = iteration
-                ht_list.append(ht)
-
-                df_CFD = pd.read_csv(file_path_result_CFD, sep=';')
-                df_CFD['iteration'] = iteration
-                df_CFD.index = [f'part{i}' for i in range(1, nb_hx+3)]
-                CFD_list.append(df_CFD)
-
-                df_one = pd.read_csv(file_path_df_one, sep=';')
-                df_one['iteration'] = iteration
-                df_one.index = [f'part{i}' for i in range(1, nb_hx+3)]
-                df_one_list.append(df_one)
-
-                slices_df = pd.read_csv(file_path_slices_df, sep=';')
-                slices_df['iteration'] = iteration
-                slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
-                slices_df_list.append(slices_df)
-
-            file_path_df_one = hyp['CFD_ht_path']+'_df_one' + f'_{iteration+1}.csv'
-            file_path_slices_df = hyp['CFD_ht_path']+'_slices_df' + f'_{iteration+1}.csv'
-
-            df_one = pd.read_csv(file_path_df_one, sep=';')
-            df_one['iteration'] = iteration+1
-            df_one.index = [f'part{i}' for i in range(1, nb_hx+3)]
-            df_one_list.append(df_one)
-
-            slices_df = pd.read_csv(file_path_slices_df, sep=';')
-            slices_df['iteration'] = iteration+1
-            slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
-            slices_df_list.append(slices_df)
-            
-            return(ht_list, CFD_list, df_one_list, slices_df_list, PyFluent_list)
-        
-        elif method == 'mesh' :
-
-        else : 
-            'method should be either mesh or case'
-
-def extract_surface_integrals(surface_name, file_path):
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-    mass_flow_rate = None
-    for line in lines:
-        if surface_name in line:
-            parts = line.split()
-            mass_flow_rate = parts[-1]
-    return(float(mass_flow_rate))
-
-def extract_residuals(file_path):
-    with open(file_path, 'r') as file:
-        data = file.read()
-
-    # Utiliser une expression régulière pour capturer les tableaux avec différents labels
-    pattern = re.compile(r'\(\(xy/key/label "([^"]+)"\)\s+((?:\d+\s+[^\s]+\s*)+)\)')
-    tables = pattern.findall(data)
-    
-    result_tables = []
-
-    for label, table in tables:
-        # Séparer les lignes
-        lines = table.strip().split('\n')
-
-        # Extraire les valeurs
-        extracted_values = []
-        for line in lines:
-            parts = line.split()
-            if len(parts) == 2:
-                index, value = parts
-                extracted_values.append((int(index), float(value)))
-        
-        # Ajouter les valeurs extraites et le label dans une liste
-        result_tables.append((label, extracted_values))
-    
-    # Liste pour stocker les DataFrames
-    dataframes = []
-    
-    # Créer un DataFrame pour chaque table
-    for label, values in result_tables:
-            df = pd.DataFrame(values, columns=['Iteration', label])
-            df.set_index('Iteration', inplace=True)
-            dataframes.append(df)
-    return dataframes
-
 def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0):
     parts_tube_back = [
         ['manifold_yu'],
@@ -972,76 +857,6 @@ def calculate_Qdot(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
     else : 
         raise ValueError('method should be either mesh, case or ref')
 
-def calculate_Qdot_v2(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0):
-    parts_tube_back = [
-        ['manifold_yu'],
-        ['hx_bend_yu_air', 'hx_bend_yu_pv'],
-        ['hx_flat_yu_air'],
-        ['hx_bend_mid_air', 'hx_bend_mid_pv'],
-        ['hx_flat_yd_air'],
-        ['hx_bend_yd_air', 'hx_bend_yd_pv'],
-        ['manifold_yd']
-    ]
-
-    parts_top = [
-        [],
-        [],
-        ['hx_flat_yu_pv-pv_backsheet-cd-cd1-pv-corps'],
-        [],
-        ['hx_flat_yd_pv-pv_backsheet-cd-cd1-pv-corps'],
-        [],
-        []
-    ]
-
-    parts_tube_fluid = [
-        ['manifold_yu'],
-        ['hx_bend_yu_air', 'hx_bend_yu_pv'],
-        ['hx_flat_yu_air', 'hx_flat_yu_pv-pv_backsheet-cd-cd1-pv-corps'],
-        ['hx_bend_mid_air', 'hx_bend_mid_pv'],
-        ['hx_flat_yd_air', 'hx_flat_yd_pv-pv_backsheet-cd-cd1-pv-corps'],
-        ['hx_bend_yd_air', 'hx_bend_yd_pv'],
-        ['manifold_yd']
-    ]
-
-    PV = ['pv_front', 'pv_backsheet']
-
-    method = plot_hyp['method']
-    nb_it = plot_hyp['nb_it']
-
-    if method == 'case':
-        no_case = plot_hyp['no_case']
-        no_mesh = plot_hyp['no_mesh']
-
-        ht_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data_v2(plot_hyp, panelSpecs, hyp, stepConditions)
-        nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
-
-        ht = ht_list[iteration]
-
-        Qdot_tube_back = []
-        Qdot_top = []
-        Qdot_top_rad = []
-        Qdot_tube_fluid = []
-        Qdot_PV_sky = []
-
-        for i in range(1, nb_hx + 3):
-            if i == 3 or i == 5:
-                Qdot_tube_back.append(4.75 * ht[ht['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
-                Qdot_tube_fluid.append(-4.75 * ht[ht['Component'].isin(parts_tube_fluid[i - 1])]['ht'].sum())
-                Qdot_top.append(4.75 * ht[ht['Component'].isin(parts_top[i - 1])]['ht'].sum())
-                Qdot_top_rad.append(1e-6)
-
-                Qdot_PV_sky.append(
-                    - ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
-                )
-            else:
-                Qdot_tube_back.append(4.75 * ht[ht['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
-                Qdot_tube_fluid.append(-4.75 * ht[ht['Component'].isin(parts_tube_fluid[i - 1])]['ht'].sum())
-                Qdot_top.append(1e-6)
-                Qdot_top_rad.append(1e-6)
-                Qdot_PV_sky.append(1e-6)
-
-        return Qdot_tube_fluid, Qdot_top, Qdot_top_rad, Qdot_tube_back, Qdot_PV_sky
-
 def rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0) :
     method = plot_hyp['method']
     nb_it = plot_hyp['nb_it']
@@ -1100,39 +915,6 @@ def rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0
         ratio_conv_uniform = conv_part/(tot_part)
 
         return ratio_rad_AR, ratio_conv_AR, ratio_rad_uniform, ratio_conv_uniform
-
-def rad_conv_ratio_v2(plot_hyp, panelSpecs, hyp, stepConditions, mesh = 0, case = 0, iteration = 0) :
-    method = plot_hyp['method']
-    nb_it = plot_hyp['nb_it']
-
-    if method == 'case':
-        no_case = plot_hyp['no_case']
-        no_mesh = plot_hyp['no_mesh']
-
-        ht_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
-        nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
-
-        ht = ht_list[iteration]
-        tot_part= ht[ht['Component'].isin(['pv_front']) ]['ht'].values[0]
-        rad_part = ht[ht['Component'].isin(['pv_front']) ]['rad_ht'].values[0]
-        conv_part = ht[ht['Component'].isin(['pv_front']) ]['conv_ht'].values[0]
-        ratio_rad = rad_part/(tot_part)
-        ratio_conv = conv_part/(tot_part)
-
-        return ratio_rad, ratio_conv
-    
-    elif method == 'mesh' :
-        method = 'case'
-        ratio_rad_list = []
-        ratio_conv_list = []
-        for mesh in range(nb_mesh):
-            for case in range(nb_cases):
-                ratio_rad, ratio_conv = rad_conv_ratio(plot_hyp, panelSpecs, hyp, stepConditions, mesh, case, iteration)
-                ratio_rad_list.append(ratio_rad)
-                ratio_conv_list.append(ratio_conv)
-        return ratio_rad_list, ratio_conv_list
-    else : 
-        raise ValueError('method should be either mesh or case')
 
 def plot_CFD_last_it(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
         method = plot_hyp['method']
@@ -2176,6 +1958,115 @@ def plot_profile_temp(plot_hyp, panelSpecs, hyp, stepConditions) :
         else :
             raise ValueError('method should be either mesh, case or ref')
 
+def compute_quality(plot_hyp, panelSpecs, hyp, stepConditions) :
+        method = plot_hyp['method']
+        nb_it = plot_hyp['nb_it']
+        folder_path = plot_hyp['folder_path']
+        folder_case = plot_hyp['folder_name']
+        folder_mesh = plot_hyp['folder_mesh']
+
+        if method == 'case' :
+            ht_tot_list, ht_rad_list, ht_conv_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
+            no_case = plot_hyp['no_case']
+            no_mesh = plot_hyp['no_mesh']
+            no_it = plot_hyp['nb_it']-1
+
+            # T_air_in = stepConditions[no_case]['T_amb']
+            T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_list[no_it])
+            T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_list[no_it])
+
+            T_air_out = 0 ## Valeur moyenne en sortie ? => report 
+
+            folder_path = os.path.join(folder_path, f'{folder_mesh}{no_mesh+1}', f'{folder_case}{no_case}')
+            file_name = f'mass_flow_rate_cas{no_case}_it{no_it}'
+            mdot_air = -extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
+            # file_name = f'temp_inlet_cas{no_case}_it{no_it}'
+            # T_air_in = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
+            T_air_in = 273.15
+            file_name = f'temp_outlet_cas{no_case}_it{no_it}'
+            T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
+
+            mdot_water = stepConditions[no_case]['mdot']
+
+            cp_water = 3800
+            cp_air = 1004
+            
+            q_air = mdot_air*cp_air
+            q_water = mdot_water*cp_water
+            
+
+            Z = q_air / q_water
+            # if q_air > q_water :
+            #     epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+            # else : 
+            #     epsilon = (T_air_in - T_air_out)/(T_air_in - T_man_in)
+            epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+            NUT = (1/(1-Z))*np.log((1-Z*epsilon)/(1-epsilon))
+
+            return epsilon, NUT
+
+        elif method == 'mesh' :
+            ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_mesh_case_list[0][0][0]))
+            nb_mesh = plot_hyp['nb_mesh']
+            nb_cases = plot_hyp['nb_cases']
+            no_it = plot_hyp['nb_it']-1
+
+            epsilon_mesh_case_list = []
+            NUT_mesh_case__list = []
+
+            for mesh in range(nb_mesh):
+                epsilon_case_list = []
+                NUT_case_list = []
+                for case in range(nb_cases):
+
+                    T_air_in = stepConditions[case]['T_amb']
+                    T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
+                    T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
+
+                    T_air_out = 0 ## Valeur moyenne en sortie ? => report 
+
+                    folder_path = os.path.join(plot_hyp['folder_path'], f'{folder_mesh}{mesh+1}', f'{folder_case}{case}')
+                    file_name = f'mass_flow_rate_cas{case}_it{no_it}'
+                    mdot_air = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
+                    file_name = f'temp_outlet_cas{case}_it{no_it+1}'
+                    T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
+
+                    mdot_water = stepConditions[case]['mdot']
+
+                    cp_water = 3800
+                    cp_air = 1004
+                    
+                    q_air = mdot_air*cp_air
+                    q_water = mdot_water*cp_water
+
+                    Z = q_air / q_water
+
+                    if q_air > q_water :
+                        epsilon_value = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+                    else : 
+                        epsilon_value = (T_air_in - T_air_out)/(T_air_in - T_man_in)
+
+                    NUT_value = (1/(1-Z))*np.log((1-Z*epsilon_value)/(1-epsilon_value))
+
+                    epsilon_case_list.append(epsilon_value)
+                    NUT_case_list.append(NUT_value)
+                    
+                epsilon_mesh_case_list.append(epsilon_case_list)
+                NUT_mesh_case__list.append(NUT_case_list)
+
+            return epsilon_mesh_case_list, NUT_mesh_case__list
+
+        elif method == 'ref' :
+            ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
+            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_AR_list[0]))
+
+        else :
+            raise ValueError('method should be either mesh, case or ref')
+
+##-------------------------
+
 def plot_1D_DeltaT_part(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) : ## A MODIFIER avec la nouvelle implémentation
         method = plot_hyp['method']
         nb_it = plot_hyp['nb_it']
@@ -2301,133 +2192,930 @@ def plot_1D_DeltaT_tot(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) : ## A M
 
         else :
             raise ValueError('method should be either mesh, case or ref')
+  
 
-def compute_quality(plot_hyp, panelSpecs, hyp, stepConditions) :
-        method = plot_hyp['method']
-        nb_it = plot_hyp['nb_it']
-        folder_path = plot_hyp['folder_path']
-        folder_case = plot_hyp['folder_name']
-        folder_mesh = plot_hyp['folder_mesh']
+# Nouvelles fonctions
+def get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case) : 
+    pickle_files = []
+    Inputs = ['steadyStateConditions_dict', 'panelSpecs', 'Model_hypotheses', 'Inputs_PyFluent']
 
-        if method == 'case' :
-            ht_tot_list, ht_rad_list, ht_conv_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
-            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
-            no_case = plot_hyp['no_case']
-            no_mesh = plot_hyp['no_mesh']
-            no_it = plot_hyp['nb_it']-1
+    for input in Inputs:
+        with open(os.path.join(SR_fp, caoMeshCode, f'{testConditionsCode}_{method}_try{no_try}_Inputs', f'{input}.pkl'), 'rb') as f:
+            loaded_data = pickle.load(f)
+            pickle_files.append(loaded_data)
 
-            # T_air_in = stepConditions[no_case]['T_amb']
-            T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_list[no_it])
-            T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_list[no_it])
+    stepCondition = pickle_files[0][no_case]
+    panelSpecs = pickle_files[1]
+    hyp = pickle_files[2]
+    folder_path_case = os.path.join(SR_fp, caoMeshCode, f'{testConditionsCode}_{method}_try{no_try}_case{no_case}')
 
-            T_air_out = 0 ## Valeur moyenne en sortie ? => report 
+    log = pd.read_csv(os.path.join(folder_path_case,f'log.csv'), sep=';', index_col=0)
+    if log['iteration'].iloc[0] == 1 : 
+        log['iteration'] -= 1
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan' :
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i]
+    else:
+        nb_it = None
+        return('No iteration found')
+    df_one_per_part_list = []
+    phis_list = []
+    CFD_ht_list = []
 
-            folder_path = os.path.join(folder_path, f'{folder_mesh}{no_mesh+1}', f'{folder_case}{no_case}')
-            file_name = f'mass_flow_rate_cas{no_case}_it{no_it}'
-            mdot_air = -extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
-            # file_name = f'temp_inlet_cas{no_case}_it{no_it}'
-            # T_air_in = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
-            T_air_in = 273.15
-            file_name = f'temp_outlet_cas{no_case}_it{no_it}'
-            T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
 
-            mdot_water = stepConditions[no_case]['mdot']
+    for iteration in range(nb_it+1) :
+        file_path_phis = os.path.join(folder_path_case, f'phis_{iteration}.csv') 
+        file_path_df_one = os.path.join(folder_path_case, f'df_one_per_part_{iteration}.csv')
+        file_path_all_ht = os.path.join(folder_path_case, f'all_ht_report_{iteration}.csv')
+        file_path_ht_tot = os.path.join(folder_path_case, f'ht_tot_report_{iteration}.csv')
 
-            cp_water = 3800
-            cp_air = 1004
+        df_phis = pd.read_csv(file_path_phis, sep=';') ## index_col = 0 ? Intérêt pour celle-ci ?
+        phis_list.append(df_phis)
+
+        df_one = pd.read_csv(file_path_df_one, sep=';', index_col=0)
+        df_one_per_part_list.append(df_one)
+
+        ht = pd.read_csv(file_path_all_ht, sep=';')
+        ht_tot = pd.read_csv(file_path_ht_tot, sep=',')
+
+
+        Qdot_tube_back = []
+        Qdot_top = []
+        Qdot_top_rad = []
+        Qdot_tube_fluid = []
+        Qdot_PV_sky = []
+        Qdot_top_conv = []
+        Qdot_top_rad = []
+        Qdot_tube_back_conv = []
+        Qdot_tube_back_rad = []
+
+        tot_part= ht[ht['Component'].isin(['pv_front']) ]['ht'].values[0]- ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
+        rad_part = ht[ht['Component'].isin(['pv_front']) ]['rad_ht'].values[0]
+        conv_part = ht[ht['Component'].isin(['pv_front']) ]['conv_ht'].values[0]
+        ratio_rad = rad_part/(tot_part)
+        ratio_conv = conv_part/(tot_part)
+
+
+        df_one_per_part_list[iteration]['Qdot_top'] = df_one_per_part_list[iteration]['Qdot_top_conv']
+        df_one_per_part_list[iteration]['Qdot_top_rad'] = ratio_rad * df_one_per_part_list[iteration]['Qdot_top_conv']
+        df_one_per_part_list[iteration]['Qdot_tube_back_rad'] = ratio_rad * df_one_per_part_list[iteration]['Qdot_tube_back']
+        df_one_per_part_list[iteration]['Qdot_top_conv'] = ratio_conv * df_one_per_part_list[iteration]['Qdot_top_conv']
+        df_one_per_part_list[iteration]['Qdot_tube_back_conv'] = ratio_conv * df_one_per_part_list[iteration]['Qdot_tube_back']
+
+        nb_hx = len(df_one_per_part_list[0])
+
+        if hyp['fins_CFD'] == 0 :
+            parts_tube_back = [
+            ['manifold_yu'],
+            ['hx_bend_yu_air', 'hx_bend_yu_pv'],
+            ['hx_flat_yu_air'],
+            ['hx_bend_mid_air', 'hx_bend_mid_pv'],
+            ['hx_flat_yd_air'],
+            ['hx_bend_yd_air', 'hx_bend_yd_pv'],
+            ['manifold_yd']
+            ]
+
+            parts_top = [
+                [],
+                [],
+                ['hx_flat_yu_pv-pv_backsheet-cd-cd1-pv-corps'],
+                [],
+                ['hx_flat_yd_pv-pv_backsheet-cd-cd1-pv-corps'],
+                [],
+                []
+            ]
+
+            Qdot_tube_back = []
+            Qdot_top = []
+            Qdot_top_rad = []
+            Qdot_tube_fluid = []
+            Qdot_PV_sky = []
+            Qdot_top_conv = []
+            Qdot_top_rad = []
+            Qdot_tube_back_conv = []
+            Qdot_tube_back_rad = []
+
+            for i in range(1, nb_hx + 1):
+                Qdot_tube_back.append(4.75 * ht[ht['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
+                Qdot_tube_back_rad.append(ratio_rad * Qdot_tube_back[-1])
+                Qdot_tube_back_conv.append(ratio_conv * Qdot_tube_back[-1])
+                if i == 3 or i == 5:
+                    Qdot_top.append(4.75 * ht[ht['Component'].isin(parts_top[i - 1])]['ht'].sum())
+                    Qdot_PV_sky.append(
+                        - 4.75*ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
+                    )
+                else:
+                    Qdot_top.append(1e-6)
+                    Qdot_PV_sky.append(1e-6)
+                Qdot_top_rad.append(ratio_rad * Qdot_top[-1])
+                Qdot_top_conv.append(ratio_conv * Qdot_top[-1])
+
+                Qdot_tube_fluid.append(-Qdot_tube_back[-1] - Qdot_top[-1] - Qdot_PV_sky[-1])
             
-            q_air = mdot_air*cp_air
-            q_water = mdot_water*cp_water
-            
-
-            Z = q_air / q_water
-            # if q_air > q_water :
-            #     epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
-            # else : 
-            #     epsilon = (T_air_in - T_air_out)/(T_air_in - T_man_in)
-            epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
-            NUT = (1/(1-Z))*np.log((1-Z*epsilon)/(1-epsilon))
-
-            return epsilon, NUT
-
-        elif method == 'mesh' :
-            ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
-            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_mesh_case_list[0][0][0]))
-            nb_mesh = plot_hyp['nb_mesh']
-            nb_cases = plot_hyp['nb_cases']
-            no_it = plot_hyp['nb_it']-1
-
-            epsilon_mesh_case_list = []
-            NUT_mesh_case__list = []
-
-            for mesh in range(nb_mesh):
-                epsilon_case_list = []
-                NUT_case_list = []
-                for case in range(nb_cases):
-
-                    T_air_in = stepConditions[case]['T_amb']
-                    T_man_in = apb.get_value('T_fluid_in_man', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
-                    T_man_out = apb.get_value('T_fluid_out_man', 'named_expression', PyFluent_mesh_case_list[mesh][case][-1])
-
-                    T_air_out = 0 ## Valeur moyenne en sortie ? => report 
-
-                    folder_path = os.path.join(plot_hyp['folder_path'], f'{folder_mesh}{mesh+1}', f'{folder_case}{case}')
-                    file_name = f'mass_flow_rate_cas{case}_it{no_it}'
-                    mdot_air = extract_surface_integrals('face-inlet-under-panel', os.path.join(folder_path, file_name))
-                    file_name = f'temp_outlet_cas{case}_it{no_it+1}'
-                    T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(folder_path, file_name))
-
-                    mdot_water = stepConditions[case]['mdot']
-
-                    cp_water = 3800
-                    cp_air = 1004
-                    
-                    q_air = mdot_air*cp_air
-                    q_water = mdot_water*cp_water
-
-                    Z = q_air / q_water
-
-                    if q_air > q_water :
-                        epsilon_value = (T_man_out-T_man_in)/(T_air_in-T_man_in)
-                    else : 
-                        epsilon_value = (T_air_in - T_air_out)/(T_air_in - T_man_in)
-
-                    NUT_value = (1/(1-Z))*np.log((1-Z*epsilon_value)/(1-epsilon_value))
-
-                    epsilon_case_list.append(epsilon_value)
-                    NUT_case_list.append(NUT_value)
-                    
-                epsilon_mesh_case_list.append(epsilon_case_list)
-                NUT_mesh_case__list.append(NUT_case_list)
-
-            return epsilon_mesh_case_list, NUT_mesh_case__list
-
-        elif method == 'ref' :
-            ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
-            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_AR_list[0]))
+            data = {
+                'Qdot_tube_fluid' : Qdot_tube_fluid,
+                'Qdot_tube_back': Qdot_tube_back,
+                'Qdot_top': Qdot_top,
+                'Qdot_top_conv': Qdot_top_conv,
+                'Qdot_top_rad': Qdot_top_rad,
+                'Qdot_tube_back_conv': Qdot_tube_back_conv,
+                'Qdot_tube_back_rad': Qdot_tube_back_rad,
+                'Qdot_PV_sky': Qdot_PV_sky
+            }
+            index = [f'part{i}' for i in range(1, nb_hx + 1)]
+            df = pd.DataFrame(data, index=index)
+            CFD_ht_list.append(df)
 
         else :
-            raise ValueError('method should be either mesh, case or ref')
+            parts_tube_back = [
+            ['manifold_yu'],
+            ['hx_bend_yu_air', 'hx_bend_yu_pv'],
+            ["hx_flat_yu_air","hx_flat_yu_air.1","hx_flat_yu_air.2","hx_flat_yu_air.3"],
+            ['hx_bend_mid_air', 'hx_bend_mid_pv'],
+            ["hx_flat_yd_air","hx_flat_yd_air.1","hx_flat_yd_air.2","hx_flat_yd_air.3"],
+            ['hx_bend_yd_air', 'hx_bend_yd_pv'],
+            ['manifold_yd']
+            ]
 
-def plot_template(Qdot, plot_hyp, panelSpecs, hyp, stepConditions) :
-        method = plot_hyp['method']
-        nb_it = plot_hyp['nb_it']
+            fins = [
+            [],
+            [],
+            ["fins-fins_zd1:1", "fins-fins_zd2:1", "fins-fins_zd3:1", "fins_zd1", "fins_zd2", "fins_zd3"],
+            [],
+            ["fins-fins_zd4:1", "fins-fins_zd5:1", "fins-fins_zd6:1", "fins_zd4", "fins_zd5", "fins_zd6",],
+            [],
+            []
+            ]
 
-        if method == 'case' :
-            ht_tot_list, ht_rad_list, ht_conv_list, CFD_list, df_one_list, slices_df_list, PyFluent_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
-            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_list[0]))
-            no_case = plot_hyp['no_case']
-            no_mesh = plot_hyp['no_mesh']
+            parts_top = [
+                [],
+                [],
+                ['hx_flat_yu_pv-pv_backsheet-cd-cd1-pv-corps'],
+                [],
+                ['hx_flat_yd_pv-pv_backsheet-cd-cd1-pv-corps'],
+                [],
+                []
+            ]
 
-        elif method == 'mesh' :
-            ht_tot_mesh_case_list, ht_rad_mesh_case_list, ht_conv_mesh_case_list, CFD_mesh_case_list, df_one_mesh_case_list, slices_df_mesh_case_list, PyFluent_mesh_case_list = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
-            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_mesh_case_list[0][0][0]))
-            nb_mesh = plot_hyp['nb_mesh']
-            nb_cases = plot_hyp['nb_cases']
+            for i in range(1, nb_hx + 1):
+                
+                if i == 3 or i == 5:
+                    Qdot_top.append(4.75 * ht[ht['Component'].isin(parts_top[i - 1])]['ht'].sum())
+                
+                    # rad_flat = ht[ht['Component'].isin(parts_tube_back[parts_tube_back[i-1]] or fins[i-1]) ]['rad_ht'].sum() ## Checker si ça marche
+                    flat_tot = ht[ht['Component'].isin(parts_tube_back[i-1]) ]['ht'].sum()
+                    conv_flat_ext = ht[ht['Component'].isin([parts_tube_back[i-1][0]]) ]['conv_ht'].sum()
+                    conv_fins = ht[ht['Component'].isin(fins[i-1]) ]['conv_ht'].sum()
+                    conv_flat_tot = conv_flat_ext + conv_fins
+                    rad_flat_tot = flat_tot - conv_flat_tot
 
-        elif method == 'ref' :
-            ht_tot_AR_list, ht_rad_AR_list, ht_conv_AR_list, CFD_AR_list, df_one_AR_list, slices_df_AR_list, PyFluent_AR_list, ht_tot_uniform, ht_rad_uniform, ht_conv_uniform, CFD_uniform, df_one_uniform, slices_df_uniform, df_PyFluent_uniform, df_one_1D, slices_df_1D, df_PyFluent_1D = get_data(plot_hyp, panelSpecs, hyp, stepConditions)
-            nb_hx = int(apb.get_value('nb_hx', 'named_expression', PyFluent_AR_list[0]))
+                    df_one_per_part_list[iteration].loc[f'part{i}', 'Qdot_tube_back_rad'] = rad_flat_tot/flat_tot * df_one_per_part_list[iteration].loc[f'part{i}', 'Qdot_tube_back']
+                    df_one_per_part_list[iteration].loc[f'part{i}', 'Qdot_tube_back_conv'] = conv_flat_tot/flat_tot * df_one_per_part_list[iteration].loc[f'part{i}', 'Qdot_tube_back']
 
-        else :
-            raise ValueError('method should be either mesh, case or ref')
+                    Qdot_tube_back.append(4.75*flat_tot)
+                    Qdot_tube_back_rad.append(4.75*rad_flat_tot)
+                    Qdot_tube_back_conv.append(4.75*conv_flat_tot)
+
+                    Qdot_PV_sky.append(
+                        - 4.75*ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
+                    )
+                else:
+                    Qdot_top.append(1e-6)
+                    Qdot_PV_sky.append(1e-6)
+                    Qdot_tube_back.append(4.75 * ht[ht['Component'].isin(parts_tube_back[i - 1])]['ht'].sum())
+                    Qdot_tube_back_rad.append(ratio_rad * Qdot_tube_back[-1])
+                    Qdot_tube_back_conv.append(ratio_conv * Qdot_tube_back[-1])
+                    
+                Qdot_top_rad.append(ratio_rad * Qdot_top[-1])
+                Qdot_top_conv.append(ratio_conv * Qdot_top[-1])
+                Qdot_tube_fluid.append(-(Qdot_tube_back[-1] + Qdot_top[-1] + Qdot_PV_sky[-1]))
+            
+            data = {
+                'Qdot_tube_fluid' : Qdot_tube_fluid,
+                'Qdot_tube_back': Qdot_tube_back,
+                'Qdot_top': Qdot_top,
+                'Qdot_top_conv': Qdot_top_conv,
+                'Qdot_top_rad': Qdot_top_rad,
+                'Qdot_tube_back_conv': Qdot_tube_back_conv,
+                'Qdot_tube_back_rad': Qdot_tube_back_rad,
+                'Qdot_PV_sky': Qdot_PV_sky
+            }
+            index = [f'part{i}' for i in range(1, nb_hx + 1)]
+            df = pd.DataFrame(data, index=index)
+            CFD_ht_list.append(df)
+
+
+
+    return(panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list)
+
+def plot_CFD_last_it_v2(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case) :
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan' :
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i] 
+    else:
+        nb_it = None
+        return('No iteration found')
+
+    nb_hx = len(df_one_per_part_list[0])
+
+    values = []
+    total_value = 0
+
+    for part in range(1, nb_hx + 1):
+        try:
+            value = CFD_ht_list[-1].loc[f'part{part}', Qdot]
+            values.append(value)
+            total_value += value
+        except KeyError:
+            print(f'Warning: {Qdot} for part{part} not found. Skipping this part.')
+
+    values.append(total_value)
+
+    fig = go.Figure()
+    color_scale = 'Viridis'
+    colors = [pc.sample_colorscale(color_scale, i / (nb_hx - 1)) for i in range(nb_hx)]
+
+    bar_width = 0.8
+    bar_positions = np.arange(1, nb_hx + 2)
+
+    for i in range(nb_hx):
+        fig.add_trace(go.Bar(
+            x=[bar_positions[i]],
+            y=[values[i]], 
+            marker_color=colors[i], 
+            width=bar_width,
+            opacity=0.8,
+            name=f'Part {i + 1}'
+        ))
+
+    fig.add_trace(go.Bar(
+        x=[bar_positions[-1]], 
+        y=[values[-1]], 
+        marker_color='rgba(0, 0, 0, 0.5)', 
+        width=bar_width,
+        opacity=0.8,
+        name='Total'
+    ))
+
+    fig.update_layout(
+        title=f'{Qdot} results <br> CFD <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}_case{no_case}',
+        xaxis_title='Parts',
+        yaxis_title=f'{Qdot} [W]',
+        xaxis=dict(
+            tickmode='array',
+            tickvals=bar_positions,
+            ticktext=[f'Part {i}' for i in range(1, nb_hx + 1)] + ['Total']
+        ),
+        legend_title='Simulation'
+    )
+
+    return fig
+
+def plot_1D_last_it_v2(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case) :
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan' :
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i] 
+    else:
+        nb_it = None
+        return('No iteration found')
+
+    nb_hx = len(df_one_per_part_list[0])
+
+    fig = go.Figure()
+    color_scale = 'Viridis'
+    colors = [pc.sample_colorscale(color_scale, i / (nb_hx - 1)) for i in range(nb_hx)]
+
+    bar_width = 0.8
+    bar_positions = np.arange(1, nb_hx + 2)
+
+    values = []
+    total_value = 0
+
+    for part in range(1, nb_hx + 1):
+        value = df_one_per_part_list[-1][Qdot].loc[f'part{part}']
+        values.append(value)
+        total_value += value
+
+    values.append(total_value)
+
+    for i in range(nb_hx):
+        fig.add_trace(go.Bar(
+            x=[bar_positions[i]],
+            y=[values[i]], 
+            marker_color=colors[i], 
+            width=bar_width,
+            opacity=0.8,
+            name=f'Part {i + 1}'
+        ))
+
+    fig.add_trace(go.Bar(
+        x=[bar_positions[-1]], 
+        y=[values[-1]], 
+        marker_color='rgba(0, 0, 0, 0.5)', 
+        width=bar_width,
+        opacity=0.8,
+        name='Total'
+    ))
+
+    fig.update_layout(
+        title=f'{Qdot} results <br> PVT-thermal-performance-model <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}_case{no_case}',
+        xaxis_title='Parts',
+        yaxis_title=f'{Qdot} [W]',
+        xaxis=dict(
+            tickmode='array',
+            tickvals=bar_positions,
+            ticktext=[f'Part {i}' for i in range(1, nb_hx + 1)] + ['Total']
+        ),
+        legend_title='Simulation'
+    )
+
+    return fig
+
+def T_fluid_fct(T_fluid_in, y_values, a_f, b_f):
+        return (T_fluid_in + b_f / a_f) * np.exp(a_f * y_values) - b_f / a_f
+
+def T_fluid_mean(T_fluid_in, L, a_f, b_f):
+        return ((T_fluid_in + (b_f / a_f))/ (a_f*L)) * (np.exp(a_f * L) - 1) -  b_f / a_f
+
+def trace_profile_temp_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case, iteration):
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan':
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i]
+    else:
+        return 'No iteration found'
+
+    nb_hx = len(df_one_per_part_list[0])
+
+    folder_path_case = os.path.join(SR_fp, caoMeshCode, f'{testConditionsCode}_{method}_try{no_try}_case{no_case}')
+    file_path_PyFluent = os.path.join(folder_path_case, f'PyFluent_{iteration}.csv')
+    Inputs_PyFluent = pd.read_csv(file_path_PyFluent, sep=';')
+
+    L_1 = Inputs_PyFluent[Inputs_PyFluent['named_expression'] == 'L_1']['value'].values[0]
+    step = L_1 / 100
+
+    y_values_tot_iter = [0]
+    T_fluid_values_tot_iter = [df_one_per_part_list[iteration]['T_fluid_in'].iloc[1]]
+    temperature_profiles = []
+
+    for part in range(1, nb_hx - 1):
+        T_fluid_in = df_one_per_part_list[iteration]['T_fluid_in'].iloc[part]
+        L = Inputs_PyFluent[Inputs_PyFluent['named_expression'] == f'L_{part}']['value'].values[0]
+        a_f = df_one_per_part_list[iteration]['a_f'].iloc[part]
+        b_f = df_one_per_part_list[iteration]['b_f'].iloc[part]
+        
+        y_values = np.linspace(y_values_tot_iter[-1], y_values_tot_iter[-1] + L, int(L / step))
+
+        if part == 3:
+            T_fluid_mean_value = T_fluid_mean(T_fluid_in, L, a_f, b_f)
+            T_fluid_values = T_fluid_mean_value * np.ones(len(y_values))
+        else:
+            T_fluid_values = T_fluid_fct(T_fluid_in, y_values - y_values_tot_iter[-1], a_f, b_f)
+
+        y_values_tot_iter = np.concatenate((y_values_tot_iter, y_values[1:]))
+        T_fluid_values_tot_iter = np.concatenate((T_fluid_values_tot_iter, T_fluid_values[1:]))
+        temperature_profiles.append((y_values, T_fluid_values, f'part{part}'))
+
+    cmap = px.colors.sequential.Viridis
+    color = cmap[iteration % len(cmap)]
+
+    traces = []
+
+    for y_values, T_fluid_values, part in temperature_profiles:
+        traces.append(go.Scatter(
+            x=y_values,
+            y=T_fluid_values,
+            mode='lines',
+            name=part + f' (iteration {iteration})',
+            line=dict(color=color),
+            hovertemplate='y = %{x:.2f} m <br>Température = %{y:.2f} K'
+        ))
+
+    return traces
+
+def plot_profile_temp_multiple_iterations(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case, iterations):
+    fig = go.Figure()
+
+    # Ajouter les traces pour chaque itération
+    for iteration in iterations:
+        traces = trace_profile_temp_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case, iteration)
+        for trace in traces:
+            fig.add_trace(trace)
+
+    fig.update_layout(
+        title=f'Profils de température pour différentes itérations <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}_case{no_case}',
+        xaxis_title='y (m)',
+        yaxis_title='Température (K)',
+        legend_title='Partie',
+        template='plotly_white'
+    )
+
+    fig.show()
+
+def compute_quality(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case) :
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan' :
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i]
+    else:
+        nb_it = None
+        # return('No iteration found')
+
+    nb_hx = len(df_one_per_part_list[0])
+    no_it = nb_it - 1
+
+    T_air_in = stepCondition['T_amb']
+    T_man_in = df_one_per_part_list[no_it]['T_fluid_in'].iloc[0]
+    T_man_out = df_one_per_part_list[no_it]['T_fluid_out'].iloc[-1]
+
+    T_air_out = 0
+
+    file_path = os.path.join(SR_fp, caoMeshCode, f'{testConditionsCode}_{method}_try{no_try}_case{no_case}') 
+    file_name = f'mass_flow_rate_cas{no_case}_it{no_it}'
+    mdot_air = -extract_surface_integrals('face-inlet-under-panel', os.path.join(file_path, file_name))
+    T_air_in = 273.15
+    file_name = f'temp_outlet_cas{no_case}_it{no_it}'
+    T_air_out = extract_surface_integrals('face-outlet-under-panel', os.path.join(file_path, file_name))
+
+    mdot_water = stepCondition['mdot']
+
+    cp_water = 3800
+    cp_air = 1004
+
+    q_air = mdot_air*cp_air
+    q_water = mdot_water*cp_water
+
+
+    Z = q_air / q_water
+    # if q_air > q_water :
+    #     epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+    # else : 
+    #     epsilon = (T_air_in - T_air_out)/(T_air_in - T_man_in)
+    epsilon = (T_man_out-T_man_in)/(T_air_in-T_man_in)
+    NUT = (1/(1-Z))*np.log((1-Z*epsilon)/(1-epsilon))
+
+    return epsilon, NUT
+
+def plot_big_it(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case) :
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan' :
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i] 
+    else:
+        nb_it = None
+        return('No iteration found')
+
+    nb_hx = len(df_one_per_part_list[0])
+
+    values_cfd = [[] for _ in range(nb_hx + 1)]
+    values_1d = [[] for _ in range(nb_hx + 1)]
+    values = [[] for _ in range(nb_hx + 1)]
+    iterations_cfd = [[] for _ in range(nb_hx + 1)]
+    iterations_1d = [[] for _ in range(nb_hx + 1)]
+    iterations = [[] for _ in range(nb_hx + 1)]
+
+    fig = go.Figure()
+
+    color_scale = 'Viridis'
+    colors = [pc.sample_colorscale(color_scale, i / (nb_hx - 1))[0] for i in range(nb_hx)]
+
+    for iteration in range(nb_it+1):
+        for part in range(1, nb_hx + 1):
+            value_cfd = CFD_ht_list[iteration].loc[f'part{part}', Qdot]
+            values_cfd[part-1].append(value_cfd)
+            iterations_cfd[part-1].append(iteration + 1)
+            
+            value_1d = df_one_per_part_list[iteration][Qdot].loc[f'part{part}']
+            values_1d[part-1].append(value_1d)
+            iterations_1d[part-1].append(iteration + 0.5)
+            
+            values[part-1].append(value_1d)
+            values[part-1].append(value_cfd)
+            iterations[part-1].append(iteration + 0.5)
+            iterations[part-1].append(iteration + 1)
+
+    for part in range(1, nb_hx + 1):
+        fig.add_trace(go.Scatter(
+            x=iterations_cfd[part-1],
+            y=values_cfd[part-1],
+            mode='markers',
+            name=f'Part {part} CFD',
+            line=dict(width=2, color=colors[part-1]),
+            marker=dict(symbol='cross'),
+            hovertemplate='CFD Itération: %{x}<br>'+f'{Qdot} : '+'%{y:.2f} W<br>Part '+f'{part}',
+        ))
+        
+        fig.add_trace(go.Scatter(
+            x=iterations_1d[part-1],
+            y=values_1d[part-1],
+            mode='markers',
+            name=f'Part {part} 1D',
+            line=dict(width=2, color=colors[part-1], dash='dot'),
+            marker=dict(symbol='x'),
+            hovertemplate='1D Itération: %{x}'+f'<br>{Qdot} : '+'%{y:.2f} W'+f'<br>Part {part}',
+        ))
+
+        fig.add_trace(go.Scatter(
+            x=iterations[part-1],
+            y=values[part-1],
+            mode='lines',
+            name=f'Part {part}',
+            line=dict(width=2, color=colors[part-1], dash='dot'),
+        ))
+
+    fig.update_layout(
+        title=f'{Qdot} results <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}_case{no_case}',
+        xaxis_title='Itération',
+        yaxis_title=f'{Qdot} [W]',
+        legend_title='Simulation'
+    )
+
+    return fig
+
+def plot_CFD_participation_last_it(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case):
+    Qdot_list = ['Qdot_tube_fluid', 'Qdot_top', 'Qdot_tube_back', 'Qdot_PV_sky', 'Qdot_top_rad', 
+                 'Qdot_top_conv', 'Qdot_tube_back_rad', 'Qdot_tube_back_conv']
+    
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan':
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i]
+    else:
+        nb_it = None
+        return('No iteration found')
+
+    nb_hx = len(df_one_per_part_list[0])
+
+    fig = go.Figure()
+    
+    color_scale = 'Viridis'
+    colors = pc.sample_colorscale(color_scale, np.linspace(0, 1, len(Qdot_list)))
+
+    total_values = []
+
+    for Qdot in Qdot_list:
+        total_value = 0
+
+        for part in range(1, nb_hx + 1):
+            try:
+                value = abs(CFD_ht_list[-1].loc[f'part{part}', Qdot])
+                total_value += value
+            except KeyError:
+                print(f'Warning: {Qdot} for part{part} not found. Skipping this part.')
+
+        total_values.append(total_value)
+
+    fig.add_trace(go.Bar(
+        x=Qdot_list,  
+        y=total_values,  
+        marker_color=colors,
+        opacity=0.8
+    ))
+
+    fig.update_layout(
+        title=f'Total Heat Transfers <br> CFD <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}_case{no_case}',
+        xaxis_title='Qdot Type',
+        yaxis_title='Total Heat Transfer [W]',
+        legend_title='Heat Transfer Types'
+    )
+
+    return fig
+
+def plot_1D_participation_last_it(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case):
+    Qdot_list = ['Qdot_tube_fluid', 'Qdot_top', 'Qdot_tube_back', 'Qdot_PV_sky', 'Qdot_top_rad', 
+                 'Qdot_top_conv', 'Qdot_tube_back_rad', 'Qdot_tube_back_conv']
+    
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan':
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i]
+    else:
+        nb_it = None
+        return('No iteration found')
+
+    nb_hx = len(df_one_per_part_list[0])
+
+    fig = go.Figure()
+    
+    color_scale = 'Viridis'
+    colors = pc.sample_colorscale(color_scale, np.linspace(0, 1, len(Qdot_list)))
+
+    total_values = []
+
+    for Qdot in Qdot_list:
+        total_value = 0
+
+        for part in range(1, nb_hx + 1):
+            try:
+                value = abs(df_one_per_part_list[-1].loc[f'part{part}', Qdot])
+                total_value += value
+            except KeyError:
+                print(f'Warning: {Qdot} for part{part} not found. Skipping this part.')
+
+        total_values.append(total_value)
+
+    fig.add_trace(go.Bar(
+        x=Qdot_list,
+        y=total_values, 
+        marker_color=colors, 
+        opacity=0.8
+    ))
+
+    fig.update_layout(
+        title=f'Total Heat Transfers <br> 1D Model <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}_case{no_case}',
+        xaxis_title='Qdot Type',
+        yaxis_title='Total Heat Transfer [W]',
+        legend_title='Heat Transfer Types'
+    )
+
+    return fig
+
+def trace_1D_participation_stacked_last_it(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case):
+    """
+    Retourne les traces pour un graphique de type stacked bar chart montrant la participation de chaque type de transfert de chaleur.
+    """
+    Qdot_list = ['Qdot_PV_sky', 'Qdot_top_rad', 'Qdot_top_conv', 'Qdot_tube_back_rad', 'Qdot_tube_back_conv']
+    
+    panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+    
+    i = -1
+    while -i < len(log) and log['errors'].iloc[i] == 'nan':
+        i -= 1
+    if i < len(log):
+        nb_it = log['iteration'].iloc[i]
+    else:
+        return 'No iteration found'
+
+    nb_hx = len(df_one_per_part_list[0])
+
+    color_scale = 'Viridis'
+    colors = pc.sample_colorscale(color_scale, np.linspace(0, 1, len(Qdot_list)))
+
+    traces = []
+
+    for idx, Qdot in enumerate(Qdot_list):
+        total_value = 0
+
+        for part in range(1, nb_hx + 1):
+            try:
+                value = abs(df_one_per_part_list[-1].loc[f'part{part}', Qdot])
+                total_value += value
+            except KeyError:
+                print(f'Warning: {Qdot} for part{part} not found. Skipping this part.')
+
+        traces.append(go.Bar(
+            x=[f'{caoMeshCode}_no_case{no_case}'], 
+            y=[total_value], 
+            name=Qdot,
+            marker_color=colors[idx], 
+            opacity=0.8
+        ))
+
+    return traces
+
+def plot_1D_participation_stacked_last_it_multiple(SR_fp, caoMeshCode_list, testConditionsCode, method, no_try, no_case):
+    fig = go.Figure()
+
+    for caoMeshCode in caoMeshCode_list:
+        traces = trace_1D_participation_stacked_last_it(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+        
+        for trace in traces:
+            fig.add_trace(trace)
+
+    fig.update_layout(
+        title=f'Total Heat Transfers <br> 1D Model <br> {testConditionsCode}_{method}_try{no_try}_case{no_case}',
+        xaxis_title='caoMeshCode',
+        yaxis_title='Total Heat Transfer [W]',
+        legend_title='Heat Transfer Types',
+        barmode='stack',
+        xaxis=dict(
+            tickmode='array',
+            tickvals=[f'{caoMeshCode}_no_case{no_case}' for caoMeshCode in caoMeshCode_list], 
+            ticktext=caoMeshCode_list
+        )
+    )
+
+    return fig
+
+def plot_1D_participation_stacked_last_it_multiple_cases(SR_fp, caoMeshCode, testConditionsCode, method, no_try, cases):
+    fig = go.Figure()
+
+    for no_case in cases:
+        traces = trace_1D_participation_stacked_last_it(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+        
+        for trace in traces:
+            fig.add_trace(trace)
+
+    fig.update_layout(
+        title=f'Total Heat Transfers <br> 1D Model <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}',
+        xaxis_title='cases',
+        yaxis_title='Total Heat Transfer [W]',
+        legend_title='Heat Transfer Types',
+        barmode='stack',
+        xaxis=dict(
+            tickmode='array',
+            tickvals=[f'{caoMeshCode}_no_case{no_case}'  for no_case in cases], 
+            ticktext=cases
+        )
+    )
+
+    return fig
+
+def plot_1D_DeltaT_v2(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_try, cases):
+    tube_x = []
+    tube_y = []
+    fig = go.Figure()
+
+    for no_case in cases:
+        panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+
+        i = -1
+        while -i <= len(log) and log['errors'].iloc[i] == 'nan':
+            i -= 1
+
+        if i < len(log):
+            nb_it = log['iteration'].iloc[i]
+        else:
+            return 'No iteration found'
+
+        tube_value = df_one_per_part_list[nb_it][Qdot].sum()
+        T_in = stepCondition['T_fluid_in0']
+        T_out = df_one_per_part_list[nb_it]['T_fluid_out']['part7']
+        Tmean = (T_in + T_out) / 2
+        delta_temp = Tmean - stepCondition['T_amb']
+
+        tube_x.append(delta_temp)
+        tube_y.append(tube_value)
+
+    tube_x = np.array(tube_x).reshape(-1, 1)
+    tube_y = np.array(tube_y)
+
+    model = LinearRegression(fit_intercept=False)
+    model.fit(tube_x, tube_y)
+
+    a = model.coef_[0]
+    # b = model.intercept_
+    line_y = tube_x.flatten() * a 
+    r_value = model.score(tube_x, tube_y)
+
+    fig.add_trace(go.Scatter(
+        x=tube_x.flatten(), y=tube_y,
+        mode='lines+markers',
+        name=f'{caoMeshCode}_{testConditionsCode}_{method}_try{no_try}',
+        line=dict(width=2, color='blue'),
+        hovertemplate=f'{Qdot} = ' + '%{y:.2f}' + f' W'
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=tube_x.flatten(), y=line_y,
+        mode='lines',
+        name=f'{Qdot}_{caoMeshCode} = {a:.2f}*ΔT <br> r²={r_value:.5f}',
+        line=dict(width=2, color='red', dash='dash')
+    ))
+
+    fig.update_layout(
+        title=f'{Qdot} regression results <br> PVT-thermal-performance-model <br> {caoMeshCode}_{testConditionsCode}_{method}_try{no_try}',
+        xaxis_title='T_mean - T_amb [K]',
+        yaxis_title=f'{Qdot} [W]',
+        legend_title='Régression Linéaire'
+    )
+
+    return fig
+
+def trace_1D_DeltaT(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_try, cases):
+    tube_x = []
+    tube_y = []
+
+    for no_case in cases:
+        panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+
+        i = -1
+        while -i <= len(log) and log['errors'].iloc[i] == 'nan':
+            i -= 1
+
+        if i < len(log):
+            nb_it = log['iteration'].iloc[i]
+        else:
+            return 'No iteration found'
+
+        tube_value = df_one_per_part_list[nb_it][Qdot].sum()
+        T_in = stepCondition['T_fluid_in0']
+        T_out = df_one_per_part_list[nb_it]['T_fluid_out']['part7']
+        Tmean = (T_in + T_out) / 2
+        delta_temp = Tmean - stepCondition['T_amb']
+
+        tube_x.append(delta_temp)
+        tube_y.append(tube_value)
+
+    tube_x = np.array(tube_x).reshape(-1, 1)
+    tube_y = np.array(tube_y)
+
+    model = LinearRegression(fit_intercept=False)
+    model.fit(tube_x, tube_y)
+
+    a = model.coef_[0]
+    line_y = tube_x.flatten() * a
+    r_value = model.score(tube_x, tube_y)
+
+    traces = []
+    traces.append(go.Scatter(
+        x=tube_x.flatten(), y=tube_y,
+        mode='lines+markers',
+        name=f'{caoMeshCode}_{testConditionsCode}_try{no_try}',
+        line=dict(width=2),
+        hovertemplate=f'{Qdot} = ' + '%{y:.2f}' + f' W'
+    ))
+
+    traces.append(go.Scatter(
+        x=tube_x.flatten(), y=line_y,
+        mode='lines',
+        name=f'{Qdot}_{caoMeshCode} = {a:.2f}*ΔT <br> r²={r_value:.5f}',
+        line=dict(width=2, dash='dash')
+    ))
+
+    return traces
+
+def plot_1D_DeltaT_multiple(Qdot, SR_fp, caoMeshCodes, testConditionsCode, method, no_try, cases):
+    fig = go.Figure()
+
+    for caoMeshCode in caoMeshCodes:
+        traces = trace_1D_DeltaT(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_try, cases)
+        
+        for trace in traces:
+            fig.add_trace(trace)
+
+    fig.update_layout(
+        title=f'{Qdot} regression results for multiple caoMeshCodes <br> PVT-thermal-performance-model <br> {testConditionsCode}_{method}_try{no_try}',
+        xaxis_title='T_mean - T_amb [K]',
+        yaxis_title=f'{Qdot} [W]',
+        legend_title='Régression Linéaire'
+    )
+
+    return fig
+
+def generate_regression_table(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_try, cases):
+    tube_x = []
+    tube_y = []
+    for no_case in cases:
+        panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
+
+        i = -1
+        while -i <= len(log) and log['errors'].iloc[i] == 'nan':
+            i -= 1
+
+        if i < len(log):
+            nb_it = log['iteration'].iloc[i]
+        else:
+            continue 
+
+        tube_value = df_one_per_part_list[nb_it][Qdot].sum()
+        T_in = stepCondition['T_fluid_in0']
+        T_out = df_one_per_part_list[nb_it]['T_fluid_out']['part7']
+        Tmean = (T_in + T_out) / 2
+        delta_temp = Tmean - stepCondition['T_amb']
+
+        tube_x.append(delta_temp)
+        tube_y.append(tube_value)
+
+    tube_x = np.array(tube_x).reshape(-1, 1)
+    tube_y = np.array(tube_y)
+
+    if len(tube_x) > 0: 
+        model = LinearRegression(fit_intercept=False)
+        model.fit(tube_x, tube_y)
+
+        a = model.coef_[0]/1.95
+        r_value = model.score(tube_x, tube_y)
+
+    results = {
+            'caoMeshCode': caoMeshCode,
+            'testConditionsCode': testConditionsCode,
+            'method': method,
+            'no_try': no_try,
+            'slope': a,
+            'r²': r_value
+        }
+    results = pd.DataFrame(results, index=[0])
+    
+    return results
