@@ -251,7 +251,7 @@ def save_simu_1D(df_one, res, df_one_fp, res_fp, df_one_per_part_fp) :
         # result_1D_slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
         # result_1D_slices_df
 
-def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, big_it) :
+def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, hyp, big_it) :
         
         nb_hx = int(Inputs_PyFluent.loc['nb_hx', 'value'])
 
@@ -267,15 +267,29 @@ def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_re
 
         Qdot.to_csv(os.path.join(folder_path_case,f'all_ht_report_{big_it}.csv'), sep=';')
 
-        parts_tube_back = [
-            ['manifold_yu'],
-            ['hx_bend_yu_air', 'hx_bend_yu_pv'],
-            ['hx_flat_yu_air'],
-            ['hx_bend_mid_air', 'hx_bend_mid_pv'],
-            ['hx_flat_yd_air'],
-            ['hx_bend_yd_air', 'hx_bend_yd_pv'],
-            ['manifold_yd']
-        ]
+        if (hyp['fins'] == 1.) or (hyp['fins'] == "1"):
+
+            parts_tube_back = [
+                ['manifold_yu'],
+                ['hx_bend_yu_air', 'hx_bend_yu_pv'],
+                ['hx_flat_yu_air', 'hx_flat_yu_air.1', 'hx_flat_yu_air.2', 'hx_flat_yu_air.3'],
+                ['hx_bend_mid_air', 'hx_bend_mid_pv'],
+                ['hx_flat_yd_air', 'hx_flat_yd_air.1', 'hx_flat_yd_air.2', 'hx_flat_yd_air.3'],
+                ['hx_bend_yd_air', 'hx_bend_yd_pv'],
+                ['manifold_yd']
+            ]
+
+        else:
+
+            parts_tube_back = [
+                ['manifold_yu'],
+                ['hx_bend_yu_air', 'hx_bend_yu_pv'],
+                ['hx_flat_yu_air'],
+                ['hx_bend_mid_air', 'hx_bend_mid_pv'],
+                ['hx_flat_yd_air'],
+                ['hx_bend_yd_air', 'hx_bend_yd_pv'],
+                ['manifold_yd']
+            ]
 
         parts_top = [
             [],
@@ -328,6 +342,7 @@ def write_files(tui, folder_path_case, case, big_it) :
         jg.write_case(tui, folder_path_case, f'cas{case}_it{big_it}')
         jg.compute_mass_flow_rate(tui, 'face-inlet-under-panel', folder_path_case, f'mass_flow_rate_cas{case}_it{big_it}')
         jg.compute_temp_avg(tui, 'face-outlet-under-panel', folder_path_case, f'temp_outlet_cas{case}_it{big_it}')
+        jg.compute_surface_temperatures(tui, 'pvt_slice_outdoor_Fluent_GMI_fins', os.path.join(folder_path_case, f'surface_temperatures_it{big_it}'))
 
 def copy_inputs(Inputs, fp):
 
@@ -418,7 +433,7 @@ def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 
 
             # CFD
             solver.solution.run_calculation.iterate(number_of_iterations=nb_it)
-            compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, big_it) # on remplit les phis
+            compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, hyp, big_it) # on remplit les phis
             # copy for save Inputs_PyFluent
             Inputs_PyFluent.to_csv(file_path_result_PyFluent, sep=';')
 
