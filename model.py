@@ -18,7 +18,7 @@ import hx_hydraulic as hxhy
 
 import model_fins as modfins
 
-mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
+mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_conv_fins","h_f0", "h_f1", "h_f2", "h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
 add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
 
 # Iteration solving functions
@@ -37,7 +37,7 @@ def a0(componentSpecs,stepConditions,var):
         None
     """
 
-    var["a0"] = (1/(var["h_top_g"]+var["h_rad_g"]+1/componentSpecs["R_g"]))*(componentSpecs["alpha_g"]*stepConditions["G"] + var["h_top_g"]*stepConditions["T_amb"] + var["h_rad_g"]*stepConditions["T_sky"])
+    var["a0"] = (1/( var["h_top_g"] + var["h_rad_g"] + 1/componentSpecs["R_g"] ))*(componentSpecs["alpha_g"]*stepConditions["G"] + var["h_top_g"]*stepConditions["T_amb"] + var["h_rad_g"]*stepConditions["T_sky"])
 
 def a1(componentSpecs,stepConditions,var):
     """Calculates the a1 factor and stores it in var["a1"]
@@ -893,7 +893,7 @@ def Cp(componentSpecs,stepConditions,var,hyp):
     var["Cp"] = PropsSI('C','P', p_fluid*100000, 'T', T_m, fluid)
 
 def Bi_f3(componentSpecs,var):
-    h_back = var["h_back_fins"]
+    h_back = var["h_conv_fins"]
     var["Bi_f3"] = bht.Biot(componentSpecs["lambd_ail"],componentSpecs["k_ail"],h_back,componentSpecs["delta_f3"])
 
 def gammaPrime_f0(componentSpecs,var):
@@ -904,7 +904,7 @@ def gammaPrime_f0(componentSpecs,var):
     A = (componentSpecs["delta_f0_int"] * lambd)
     k = componentSpecs["k_ail"]
     delta = componentSpecs["delta_f0"]
-    h = var["h_back_fins"]
+    h = var["h_f0"]
 
     Bi = bht.Biot(lambd,k,h,delta)
     var["Bi_f0"] = Bi
@@ -921,7 +921,7 @@ def gammaPrime_f1(componentSpecs,var):
     A = (componentSpecs["delta_f1_int"] * lambd)
     k = componentSpecs["k_ail"]
     delta = componentSpecs["delta_f1"]
-    h = var["h_back_fins"]
+    h = var["h_f1"]
 
     Bi = bht.Biot(lambd,k,h,delta)
     var["Bi_f1"] = Bi
@@ -938,7 +938,7 @@ def gamma_f2(componentSpecs,var):
     A = (componentSpecs["delta_f2"] * lambd) # delta_f2_int = delta_f2
     k = componentSpecs["k_ail"]
     delta = componentSpecs["delta_f2"]
-    h = var["h_back_fins"]
+    h = var["h_f2"]
 
     Bi = bht.Biot(lambd,k,h,delta)
     var["Bi_f2"] = Bi
@@ -1088,7 +1088,22 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     mht.h_back_tube(componentSpecs,stepConditions,var,hyp)
     mht.h_rad_tube_sky(componentSpecs,stepConditions,var,hyp)
     mht.h_rad_back_tube(componentSpecs,stepConditions,var,hyp)
-    mht.h_back_fins(componentSpecs,stepConditions,var,hyp)
+    mht.h_conv_fins(componentSpecs,stepConditions,var,hyp)
+
+    if stepConditions["compt"] == 0:
+
+        for i in range(3):
+            if componentSpecs[f"fin_{i}"] == 1:
+                var[f"h_f{i}"] = var["h_conv_fins"]
+
+    else:
+
+        mht.h_rad_fins(componentSpecs,stepConditions,var,hyp)
+
+        for i in range(3):
+            if componentSpecs[f"fin_{i}"] == 1:
+                var[f"h_f{i}"] = var["h_conv_fins"] + var[f"h_rad_f{i}"]
+
 
     mht.h_rad_tube_abs(componentSpecs,stepConditions,var,hyp)
 
@@ -1173,7 +1188,7 @@ def initialize_var(var,componentSpecs,stepConditions,hyp,i):
             "h_back_tube": hyp["h_back_tube0"],
             "h_rad_tube_sky": hyp["h_rad_tube_sky0"],
             "h_rad_back_tube": hyp["h_rad_back_tube0"],
-            "h_back_fins": hyp["h_back_fins0"],
+            "h_conv_fins": hyp["h_back_fins0"],
 
             'T_PV':stepConditions["guess_T_PV"],
             'T_fluid_in':stepConditions["T_fluid_in0"],
@@ -1184,11 +1199,11 @@ def initialize_var(var,componentSpecs,stepConditions,hyp,i):
         var = {**var,
                **{
                 'h_top_g' : previous_var['h_top_g'],
-                'h_back' : previous_var['h_back'],
+                'h_back' : previous_var["h_back"],
                 'h_rad_back' : previous_var['h_rad_back'],
                 'h_rad_tube_sky' : previous_var['h_rad_tube_sky'],
-                'h_back_tube' : previous_var['h_back_tube'],
-                'h_back_fins' : previous_var['h_back_fins'],
+                'h_back_tube' : previous_var["h_back_tube"],
+                'h_conv_fins' : previous_var["h_conv_fins"],
                 'h_rad_back_tube' : previous_var['h_rad_back_tube'],
 
                 'T_PV' : previous_var['T_PV'],

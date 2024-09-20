@@ -207,36 +207,36 @@ def qp_PV_Base(componentSpecs,var):
 
 def Qdot_absfin_back(componentSpecs,stepConditions,var):
 
-    R_b = componentSpecs["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
     L_af = componentSpecs["L_af"]
 
     T_absfin_m = var["T_absfin_mean"]
     T_back = stepConditions["T_back"]
     L = componentSpecs["L_tube"]
 
-    var["Qdot_absfin_back"] = L*2*L_af*(T_absfin_m-T_back)/R_b
+    var["Qdot_absfin_back"] = L*2*L_af*(T_absfin_m-T_back)/R_abs_back
 
 def Qdot_absfin_back_rad(componentSpecs,stepConditions,var):
 
-    R_b = componentSpecs["R_2"] + 1/(var["h_rad_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_rad_back"])
     L_af = componentSpecs["L_af"]
 
     T_absfin_m = var["T_absfin_mean"]
     T_back = stepConditions["T_back"]
     L = componentSpecs["L_tube"]
 
-    var["Qdot_absfin_back_rad"] = L*2*L_af*(T_absfin_m-T_back)/R_b
+    var["Qdot_absfin_back_rad"] = L*2*L_af*(T_absfin_m-T_back)/R_abs_back
 
 def Qdot_absfin_back_conv(componentSpecs,stepConditions,var):
     
-    R_b = componentSpecs["R_2"] + 1/(var["h_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"])
     L_af = componentSpecs["L_af"]
 
     T_absfin_m = var["T_absfin_mean"]
     T_back = stepConditions["T_back"]
     L = componentSpecs["L_tube"]
 
-    var["Qdot_absfin_back_conv"] = L*2*L_af*(T_absfin_m-T_back)/R_b
+    var["Qdot_absfin_back_conv"] = L*2*L_af*(T_absfin_m-T_back)/R_abs_back
 
 def Qdot_absfin_tube(componentSpecs,stepConditions,var):
 
@@ -264,20 +264,20 @@ def Qdot_f01(componentSpecs,stepConditions,var):
     L = componentSpecs["L_tube"]
 
     if componentSpecs["fin_0"]==1:
-        gamma_0_int = var["gamma_0_int"]
+        gammaPrime_f0 = var["gammaPrime_f0"]
     else:
-        gamma_0_int = 0
+        gammaPrime_f0 = 0
     if componentSpecs["fin_1"]==1:
-        gamma_1_int = var["gamma_1_int"]
+        gammaPrime_f1 = var["gammaPrime_f1"]
     else:
-        gamma_1_int = 0
+        gammaPrime_f1 = 0
 
-    gamma = gamma_0_int + gamma_1_int
+    gammaPrime = gammaPrime_f0 + gammaPrime_f1
     
     T_tube_m = var["T_tube_mean"]
     T_back = stepConditions["T_back"]
 
-    Q = L*gamma*(T_tube_m-T_back)
+    Q = L*gammaPrime*(T_tube_m-T_back)
 
     var["Qdot_f01"] = Q
 
@@ -290,14 +290,14 @@ def Qdot_tube_back_wo_ins_conv(componentSpecs,stepConditions,var):
     h_rad_back_tube = var["h_rad_back_tube"]
     p_ext_tube = componentSpecs["p_ext_tube"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
+    R_tube_ins = componentSpecs["R_tube_ins"]
 
-    gamma_back_conv = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_back_rad = p_ext_tube_rad/(R_2+1/h_rad_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
+    gamma_back_conv = p_ext_tube/(R_tube_ins+1/h_back_tube)
+    gamma_back_rad = p_ext_tube_rad/(R_tube_ins+1/h_rad_back_tube)
+    gammaPrime_f0 = var["gammaPrime_f0"]
+    gammaPrime_f1 = var["gammaPrime_f1"]
 
-    gamma = gamma_back_conv + gamma_back_rad + gamma_0_int + gamma_1_int
+    gammaPrime = gamma_back_conv + gamma_back_rad + gammaPrime_f0 + gammaPrime_f1
 
     var["Qdot_tube_back_conv"] = L*gamma_back_conv*(T_tube_m - T_back)
 
@@ -310,14 +310,14 @@ def Qdot_tube_back_wo_ins_rad(componentSpecs,stepConditions,var):
     h_rad_back_tube = var["h_rad_back_tube"]
     p_ext_tube = componentSpecs["p_ext_tube"]
     p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
+    R_tube_ins = componentSpecs["R_tube_ins"]
 
-    gamma_back_conv = p_ext_tube/(R_2+1/h_back_tube)
-    gamma_back_rad = p_ext_tube_rad/(R_2+1/h_rad_back_tube)
-    gamma_0_int = var["gamma_0_int"]
-    gamma_1_int = var["gamma_1_int"]
+    gamma_back_conv = p_ext_tube/(R_tube_ins+1/h_back_tube)
+    gamma_back_rad = p_ext_tube_rad/(R_tube_ins+1/h_rad_back_tube)
+    gammaPrime_f0 = var["gammaPrime_f0"]
+    gammaPrime_f1 = var["gammaPrime_f1"]
 
-    gamma = gamma_back_conv + gamma_back_rad + gamma_0_int + gamma_1_int
+    gammaPrime = gamma_back_conv + gamma_back_rad + gammaPrime_f0 + gammaPrime_f1
 
     var["Qdot_tube_back_rad"] = L*gamma_back_rad*(T_tube_m - T_back)
 
@@ -412,7 +412,7 @@ def Qdot_Base_tube(componentSpecs,var):
 
 def Qdot_Base_back(componentSpecs,stepConditions,var):
 
-    R_b = componentSpecs["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
     iota = componentSpecs["iota"]
 
     T_Base_m = var["T_Base_mean"]
@@ -420,11 +420,11 @@ def Qdot_Base_back(componentSpecs,stepConditions,var):
 
     L = componentSpecs["L_tube"]
 
-    var["Qdot_Base_back"] = L*iota*(T_Base_m-T_back)/R_b
+    var["Qdot_Base_back"] = L*iota*(T_Base_m-T_back)/R_abs_back
 
 def qp_Base_back(componentSpecs,stepConditions,var):
 
-    R_b = componentSpecs["R_2"] + 1/(var["h_back"]+var["h_rad_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
     iota = componentSpecs["iota"]
 
     T_Base_m = var["T_Base_mean"]
@@ -432,7 +432,7 @@ def qp_Base_back(componentSpecs,stepConditions,var):
 
     L = componentSpecs["L_tube"]
 
-    var["qp_Base_back"] = iota*(T_Base_m-T_back)/R_b
+    var["qp_Base_back"] = iota*(T_Base_m-T_back)/R_abs_back
 
 def Qdot_absfin_Base(componentSpecs,var):
     q = var["qp_fin"]
@@ -460,7 +460,7 @@ def PB_3(componentSpecs,var):
 def Qdot_fluid_back(componentSpecs,stepConditions,var):
 
     p_ext_tube = componentSpecs["p_ext_tube"];p_ext_tube_rad = componentSpecs["p_ext_tube_rad"]
-    R_2 = componentSpecs["R_2"]
+    R_2 = componentSpecs["R_tube_ins"]
 
     k = componentSpecs["k_ail"]
     h_fluid = var["h_fluid"]
@@ -471,22 +471,22 @@ def Qdot_fluid_back(componentSpecs,stepConditions,var):
     L = componentSpecs["L_tube"]
 
     if componentSpecs["fin_0"]==1:
-        gamma_0_int = var["gamma_0_int"]
+        gammaPrime_f0 = var["gammaPrime_f0"]
     else:
-        gamma_0_int = 0
+        gammaPrime_f0 = 0
     if componentSpecs["fin_1"]==1:
-        gamma_1_int = var["gamma_1_int"]
+        gammaPrime_f1 = var["gammaPrime_f1"]
     else:
-        gamma_1_int = 0
+        gammaPrime_f1 = 0
 
-    R_2 = componentSpecs["R_2"]
+    R_2 = componentSpecs["R_tube_ins"]
     h_back_tube = var["h_back_tube"]+var["h_rad_back_tube"]
     gamma_back = p_ext_tube/(R_2+1/h_back_tube)
 
     T_fluid_m = var["T_fluid_mean"]
     T_back = stepConditions["T_back"]
 
-    zeta = (gamma_back)/(1+chi*(gamma_back+gamma_1_int+gamma_0_int))
+    zeta = (gamma_back)/(1+chi*(gamma_back+gammaPrime_f1+gammaPrime_f0))
 
     var["Qdot_fluid_back"] = L*zeta*(T_fluid_m-T_back)
 
@@ -495,27 +495,27 @@ def qp_f0(componentSpecs,stepConditions,var):
     T_fluid_m = var["T_fluid_mean"]
     T_back = stepConditions["T_back"]
 
-    gamma_0_int = var["gamma_0_int"]
+    gammaPrime_f0 = var["gammaPrime_f0"]
 
-    var["qp_f0"] = gamma_0_int*(T_fluid_m-T_back)
+    var["qp_f0"] = gammaPrime_f0*(T_fluid_m-T_back)
 
 def qp_f1(componentSpecs,stepConditions,var):
 
     T_fluid_m = var["T_fluid_mean"]
     T_back = stepConditions["T_back"]
 
-    gamma_1_int = var["gamma_1_int"]
+    gammaPrime_f1 = var["gammaPrime_f1"]
 
-    var["qp_f1"] = gamma_1_int*(T_fluid_m-T_back)
+    var["qp_f1"] = gammaPrime_f1*(T_fluid_m-T_back)
 
 def qp_f2(componentSpecs,stepConditions,var):
 
     T_abs_m = var["T_abs_mean"]
     T_back = stepConditions["T_back"]
 
-    gamma_2_int = var["gamma_2_int"]
+    gamma_f2_int = var["gamma_f2_int"]
 
-    var["qp_f2"] = gamma_2_int*(T_abs_m-T_back)
+    var["qp_f2"] = gamma_f2_int*(T_abs_m-T_back)
 
 def Qdot_f2(componentSpecs,var):
 

@@ -228,7 +228,7 @@ def back_h_simple(T_abs,T_amb,theta,longueur): # dans 'Inputs', theta est l'angl
     # angle theta en °
     # longueur en m
     
-    h_back_zero = 0.1
+    h_back_zero = 0.01
 
     DT = T_abs - T_amb
 
@@ -261,7 +261,7 @@ def back_h_simple(T_abs,T_amb,theta,longueur): # dans 'Inputs', theta est l'angl
                 h = (lambd/longueur)*Nu_L
                 return h  
             else:
-                print('back_h_simple DT<0 Ra_L < 1e4',Ra_L)
+                print(f'DT = {DT} back_h_simple DT<0 Ra_L < 1e4 -> h = 0.01',Ra_L)
                 return h_back_zero
         
         elif theta<=45 and theta>=2:
@@ -271,13 +271,11 @@ def back_h_simple(T_abs,T_amb,theta,longueur): # dans 'Inputs', theta est l'angl
                 h = (lambd/longueur)*Nu_L
                 return h
             else:
-                print('back_h_simple DT<0 Ra_L<1e5',Ra_L)
+                print(f'DT = {DT} back_h_simple DT<0 Ra_L<1e5 -> h = 0.01',Ra_L)
                 return h_back_zero
 
         else:
-            print('theta',theta)
-            print("theta should be greater than 2°")
-            return "erreur"
+            raise ValueError(f"theta = {theta} should be greater than 2°")
 
     elif DT>0:
         if theta>=2:
@@ -288,10 +286,10 @@ def back_h_simple(T_abs,T_amb,theta,longueur): # dans 'Inputs', theta est l'angl
                 h = (lambd/longueur)*Nu_L
                 return h
             else:
-                print('back_h_simple DT>0 Ra_L<1e5',Ra_L)
+                print(f'DT = {DT} back_h_simple DT>0 Ra_L<1e5 -> h = 0.01',Ra_L)
                 return h_back_zero
         else:
-            print('back_h_simple DT>0 Ra_L',Ra_L)
+            print(f'DT = {DT} back_h_simple DT>0 Ra_L -> h = 0.01',Ra_L)
             return h_back_zero
 
     else:
@@ -368,7 +366,7 @@ def h_top_forced_turbulent(T_s,T_amb,speed,longueur):
     
 def top_h_simple(T_s,T_amb,theta,longueur):
     
-    h_back_mean = 2.
+    h_zero = 0.01
 
     DT = T_s - T_amb
 
@@ -395,7 +393,7 @@ def top_h_simple(T_s,T_amb,theta,longueur):
 
         # Churchill and Chu for theta < 45°
 
-        if theta>45:
+        if (theta > 45) and (theta < 90):
             Ra_L=(g*beta*math.cos(math.pi/2-math.radians(theta))*abs(DT)*(longueur**4))/(nu*alpha)
             if Ra_L >= 1e4 and Ra_L <= 1e9:
                 Nu_L = 0.68+0.67*Ra_L**(1/4)*(1+(0.492/Pr)**(9/16))**(-4/9)
@@ -406,24 +404,23 @@ def top_h_simple(T_s,T_amb,theta,longueur):
                 h = (lambd/longueur)*Nu_L
                 return h           
             else:
-                print('top h simple DT>0 Ra_L',Ra_L)
-                return h_back_mean
+                print(f'DT = {DT} top h simple DT>0 Ra_L -> h = 0.01',Ra_L)
+                return h_zero
         
         # Raithby and Hollands
 
-        elif theta<=45:
+        elif (theta >= 2) and (theta <= 45):
             Ra_L=(g*beta*math.sin(math.pi/2-math.radians(theta))*abs(DT)*(longueur**4))/(nu*alpha)
             if Ra_L>=1e6 and Ra_L<=1e12: # normalement c'est 1e6 to 1e11
                 Nu_L = 0.14*Ra_L**(1/3)*((1+0.0107*Pr)/(1+0.01*Pr))
                 h = (lambd/longueur)*Nu_L
                 return h
             else:
-                print('top h simple theta<=45 Ra_L',Ra_L)
-                return h_back_mean
+                print(f'DT = {DT} top h simple theta<=45 Ra_L -> h = 0.01',Ra_L)
+                return h_zero
 
         else:
-            print('theta',theta)
-            return h_back_mean
+            raise ValueError("theta should be greater or equal than 2 and strictly less than 90°")
 
     # Fujii and Imura
 
@@ -435,16 +432,28 @@ def top_h_simple(T_s,T_amb,theta,longueur):
                 h = (lambd/longueur)*Nu_L
                 return h
             else:
-                print('top h simple DT<0 theta>=2 Ra_L',Ra_L)
-                return h_back_mean
+                print(f'DT = {DT} top h simple DT<0 theta>=2 Ra_L < 1e5 -> h = 0.01',Ra_L)
+                return h_zero
         else:
-            print('Ra_L',Ra_L)
-            return h_back_mean
+            raise ValueError("theta should be greater than 2°")
 
-    print('DT',DT)
-    return h_back_mean
+    print('DT =',DT)
 
-def view_factor_aligned_rectangles(X, Y, L):
+def view_factor_aligned_rectangles(w_i, w_j, L):
+
+    W_i = w_i / L
+    W_j = w_j / L
+    
+    # Compute the view factor
+    F_ij = ( np.sqrt((W_i + W_j)**2 + 4) - np.sqrt((W_j - W_i)**2 + 4) ) / ( 2 * W_i )
+    
+    return F_ij
+
+def view_factor_perpendicular_rectangles(w_i, w_j):
+    
+    return ( 1 + (w_j/w_i) - (1 + (w_j/w_i)**2 )**(1/2) ) / 2
+
+def view_factor_aligned_rectangles_3D(X, Y, L):
     X_bar = X / L
     Y_bar = Y / L
     term1 = np.log(((1 + X_bar**2) * (1 + Y_bar**2)) / (1 + X_bar**2 + Y_bar**2)) ** (1/2)
@@ -454,7 +463,7 @@ def view_factor_aligned_rectangles(X, Y, L):
     F_ij = (2 / (np.pi * X_bar * Y_bar)) * (term1 + term2 + term3 + term4)
     return F_ij
 
-def view_factor_perpendicular_rectangles(X, Y, Z):
+def view_factor_perpendicular_rectangles_3D(X, Y, Z):
     W = Y / X
     H = Z / X
     term1 = W * np.arctan(1 / W)

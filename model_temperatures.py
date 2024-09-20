@@ -291,24 +291,24 @@ def T_PV_absfin_mean(componentSpecs,var):
     var["T_PV_absfin_mean"] = (W*T_PV_mean - (W-2*L_af)*T_PV_Base_mean)/(2*L_af)
 
 def T_ins_tube_mean(componentSpecs,var):
-    R_2 = componentSpecs["R_2"]
+    R_tube_ins = componentSpecs["R_tube_ins"]
     T_tube_mean = var["T_tube_mean"]
     Qdot_tube_back = var["Qdot_tube_back"]
 
     L = componentSpecs["L_tube"]
     p_ext_tube = componentSpecs["p_ext_tube"]
 
-    var["T_ins_tube_mean"] = T_tube_mean - R_2*Qdot_tube_back/(L*p_ext_tube)
+    var["T_ins_tube_mean"] = T_tube_mean - R_tube_ins*Qdot_tube_back/(L*p_ext_tube)
 
 def T_ins_absfin_mean(componentSpecs,var):
-    R_2 = componentSpecs["R_2"]
+    R_abs_ins = componentSpecs["R_abs_ins"]
     T_absfin_mean = var["T_absfin_mean"]
     Qdot_absfin_back = var["Qdot_absfin_back"]
 
     L = componentSpecs["L_tube"]
     L_af = componentSpecs["L_af"]
 
-    var["T_ins_absfin_mean"] = T_absfin_mean - R_2*Qdot_absfin_back/(L*2*L_af)
+    var["T_ins_absfin_mean"] = T_absfin_mean - R_abs_ins*Qdot_absfin_back/(L*2*L_af)
 
 def T_ins_mean(componentSpecs,var):
 

@@ -14,6 +14,8 @@ import os
 
 from IPython.core.display import HTML
 
+import heat_transfer as bht
+
 def lin(x,a,b):
     return a*x+b
 
@@ -155,6 +157,40 @@ def create_dict_from_excel(path,sheet):
 
     return res
 
+def view_factor_absorber(componentSpecs):
+
+    if componentSpecs["fin_1"] + componentSpecs["fin_2"] > 0:
+
+        w_i = componentSpecs["D"]
+        w_j = componentSpecs["D"]
+        L_fin = componentSpecs["L_f1"] if componentSpecs["fin_1"] == 1 else componentSpecs["L_f2"]
+
+        componentSpecs["view_factor_abs"] = bht.view_factor_aligned_rectangles(w_i, w_j, L_fin)
+
+    else:
+
+        componentSpecs["view_factor_abs"] = 1.
+
+def view_factor_tube(componentSpecs):
+
+    if componentSpecs['fin_0'] == 1:
+
+        w_i = componentSpecs["D"]
+        w_j = componentSpecs["D"]
+        L_fin = componentSpecs["L_f0"]
+
+        componentSpecs["view_factor_tube"] = bht.view_factor_aligned_rectangles(w_i, w_j, L_fin)
+
+    else:
+
+        componentSpecs["view_factor_tube"] = 1.
+
+def view_factor_fins(componentSpecs):
+
+    componentSpecs["view_factor_f0"] = bht.view_factor_perpendicular_rectangles(componentSpecs["D"], componentSpecs["L_f0"])
+    componentSpecs["view_factor_f1"] = bht.view_factor_perpendicular_rectangles(componentSpecs["D"], componentSpecs["L_f1"])
+    componentSpecs["view_factor_f2"] = bht.view_factor_perpendicular_rectangles(componentSpecs["D"], componentSpecs["L_f2"])
+
 # Retourne le dictionnaire de paramètres correpondant au PVT
 def import_geometry(path):
 
@@ -222,6 +258,9 @@ def import_geometry(path):
         R_inter(el)
         R_abs_ins(el)
         R_tube_ins(el)
+        view_factor_absorber(el)
+        view_factor_tube(el)
+        view_factor_fins(el)
 
     par["AG"] = par["main"]["AG"]
 
@@ -414,9 +453,15 @@ def adjust_steadyStateConditions(steadyStateConditions_df, hyp):
         steadyStateConditions_df["T_sky"] = steadyStateConditions_df["T_amb"]
         steadyStateConditions_df["Gp"] = 0
     
+    elif hyp['method_T_sky'] == 'measured':
+        pass
+
     elif hyp['method_T_sky'] == 'Guarracino':
         steadyStateConditions_df["T_sky"] = 0.0552*steadyStateConditions_df["T_amb"]**1.5
         steadyStateConditions_df["Gp"] = scc.sigma*(steadyStateConditions_df["T_sky"]**4 - steadyStateConditions_df["T_amb"]**4)
+
+    else:
+        raise ValueError('method_T_sky not implemented')
 
     steadyStateConditions_df['guess_T_PV'] = (steadyStateConditions_df['T_amb'] + steadyStateConditions_df['T_fluid_in0'])/2
 

@@ -12,6 +12,8 @@ import sys
 sys.path.append("../PVT-PL-model")
 import hx_hydraulic as hxhy
 
+import model_fins as modfins
+
 # INTERNAL CONVECTIVE
 
 def h_fluid(componentSpecs,stepConditions,var,hyp):
@@ -145,6 +147,13 @@ def h_top_g(componentSpecs,stepConditions,var,hyp):
             var["h_top_g"] = h_free
         elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent_with_coeff':
             h_forced = hyp["coeff_h_top_forced"]*h_forced_turbulent
+        elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent_with_coeff_steps':
+            if (0. <= stepConditions['u'] < 1.):
+                var["h_top_g"] = hyp["coeff_h_top_forced_range0"]*h_forced
+            elif (1. <= stepConditions['u'] < 2.):
+                var["h_top_g"] = hyp["coeff_h_top_forced_range1"]*h_forced
+            elif (2. <= stepConditions['u']):
+                var["h_top_g"] = hyp["coeff_h_top_forced_range2"]*h_forced
         elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent':
             var["h_top_g"] = h_forced_turbulent
         elif hyp['method_h_top_g_exchanger'] == 'forced_with_coeff':
@@ -379,7 +388,7 @@ def h_back_tube(componentSpecs,stepConditions,var,hyp):
         var["h_back_tube"] = (res**3 + h_forced**3)**(1/3)
 
 # Convectif entre les ailettes et l'ambiant
-def h_back_fins(componentSpecs,stepConditions,var,hyp):
+def h_conv_fins(componentSpecs,stepConditions,var,hyp):
     """Calculates the back heat transfer coefficient for the fins and stores it in var["h_back_fins"]
     
     Args:
@@ -392,37 +401,22 @@ def h_back_fins(componentSpecs,stepConditions,var,hyp):
         None"""
 
     if hyp["h_back_fins_calc"] == "tube":
-        var["h_back_fins"] = var["h_back_tube"]
+        var["h_conv_fins"] = var["h_back_tube"]
 
     elif hyp["h_back_fins_calc"] == "abs":
-        var["h_back_fins"] = var["h_back"]
+        var["h_conv_fins"] = var["h_back"]
 
     elif hyp["h_back_fins_calc"] == "TM":
         L_c = componentSpecs["L_fin"]
         D = componentSpecs["D"]
         h_free = hyp["coeff_h_back_fins_free"]*bht.back_h_fins(var["T_tube_mean"],stepConditions["T_back"],hyp["theta"],L_c,D,componentSpecs["Heta"])
         # h_free = 0.
-        h_forced = hyp["coeff_h_back_fins_forced"]*bht.ht_fins_forced_wiki(componentSpecs["L_fin"],componentSpecs["D"],stepConditions["u_back"]+0.9*stepConditions["u"])
-        var["h_back_fins"] = (h_free**3 + h_forced**3)**(1/3) + hyp["offset_h_back_fins"]
+        h_forced = hyp["coeff_h_back_fins_forced"]*bht.ht_fins_forced_wiki(componentSpecs["L_fin"],componentSpecs["D"],stepConditions["u_back"])
+        var["h_conv_fins"] = (h_free**3 + h_forced**3)**(1/3) + hyp["offset_h_back_fins"]
     else:
         pass
 
 # RADIATIVE
-
-def h_back_fins_rad(componentSpecs,stepConditions,var,hyp):
-
-    eps_fin = componentSpecs.get("eps_fin",0.9)
-
-    sigma = scc.sigma
-    T_sky = stepConditions["T_sky"]
-
-    T_fin = var["T_PV"]
-
-    tau_g_IR = componentSpecs["tau_g_IR"]
-
-    h = tau_g_IR*eps*sigma*(T_PV+T_sky)*(T_PV**2+T_sky**2)
-    var["h_rad"]=h
-
 
 # Radiatif entre le verre et le ciel
 def h_rad_g(componentSpecs,stepConditions,var,hyp):
@@ -496,7 +490,7 @@ def h_rad_back_tube(componentSpecs,stepConditions,var,hyp):
         eps = componentSpecs["eps_hx_back"]
 
     h = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
-    var["h_rad_back_tube"]=h
+    var["h_rad_back_tube"] = componentSpecs["view_factor_tube"] * h
 
 # Radiatif entre l'absorbeur et l'ambiant (toit-terrasse / indoor)
 def h_rad_back(componentSpecs,stepConditions,var,hyp):
@@ -536,9 +530,78 @@ def h_rad_back(componentSpecs,stepConditions,var,hyp):
     else:
         h1 = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
 
-    var["h_rad_back"]=h1
+    var["h_rad_back"] = componentSpecs["view_factor_abs"] * h1
 
+def h_rad_fins(componentSpecs,stepConditions,var,hyp):
 
+    if componentSpecs['fin_0'] == 1:
+
+        L_fin = componentSpecs["L_f0"]
+        lambd = componentSpecs["lambd_ail"]
+        A = (componentSpecs["delta_f0_int"] * lambd)
+        k = componentSpecs["k_ail"]
+        delta = componentSpecs["delta_f0"]
+        h = var["h_f0"]
+
+        Bi = bht.Biot(lambd,k,h,delta)
+
+        T_fin_mean = modfins.T_fin_mean('free_end', L_fin, lambd, A, k, Bi, stepConditions["T_back"], stepConditions["T_0"])
+
+        eps_fin = componentSpecs.get("eps_fin_0",0.9)
+        sigma = scc.sigma
+        T_back = stepConditions["T_back"]
+
+        h = eps_fin*sigma*(T_fin_mean+T_back)*(T_fin_mean**2+T_back**2)
+
+        view_factor = componentSpecs["view_factor_f0"]
+
+        var["h_rad_f0"] = view_factor * h
+
+    if componentSpecs['fin_1'] == 1:
+
+        L_fin = componentSpecs["L_f1"]
+        lambd = componentSpecs["lambd_ail"]
+        A = (componentSpecs["delta_f1_int"] * lambd)
+        k = componentSpecs["k_ail"]
+        delta = componentSpecs["delta_f1"]
+        h = var["h_f1"]
+
+        Bi = bht.Biot(lambd,k,h,delta)
+        
+        T_fin_mean = modfins.T_fin_mean('adiabatic', L_fin, lambd, A, k, Bi, stepConditions["T_back"], stepConditions["T_0"])
+
+        eps_fin = componentSpecs.get("eps_fin_1",0.9)
+        sigma = scc.sigma
+        T_back = stepConditions["T_back"]
+
+        h = eps_fin*sigma*(T_fin_mean+T_back)*(T_fin_mean**2+T_back**2)
+
+        view_factor = componentSpecs["view_factor_f1"]
+
+        var["h_rad_f1"] = view_factor * h
+
+    if componentSpecs['fin_2'] == 1:
+
+        L_fin = componentSpecs["L_f2"]
+        lambd = componentSpecs["lambd_ail"]
+        A = (componentSpecs["delta_f2"] * lambd) # delta_f2_int = delta_f2
+        k = componentSpecs["k_ail"]
+        delta = componentSpecs["delta_f2"]
+        h = var["h_f2"]
+
+        Bi = bht.Biot(lambd,k,h,delta)
+
+        T_fin_mean = modfins.T_fin_mean('free_end', L_fin, lambd, A, k, Bi, stepConditions["T_back"], stepConditions["T_0"])
+
+        eps_fin = componentSpecs.get("eps_fin_2",0.9)
+        sigma = scc.sigma
+        T_back = stepConditions["T_back"]
+
+        h = eps_fin*sigma*(T_fin_mean+T_back)*(T_fin_mean**2+T_back**2)
+
+        view_factor = componentSpecs["view_factor_f2"]
+
+        var["h_rad_f2"] = view_factor * h   
 
 # Radiatif entre le tube et l'absorbeur
 def h_rad_tube_abs(componentSpecs,stepConditions,var,hyp):

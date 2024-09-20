@@ -74,3 +74,19 @@ def gamma_fin(bc, L_fin_, lambd_, Ac_, k_, Bi_):
         return float(gamma_adia.subs({L_fin: L_fin_, lambd: lambd_, Ac: Ac_, k:k_, Bi: Bi_}).evalf())
     else:
         raise ValueError('Boundary condition not recognized')
+
+T_free_end = fin_analytical('free_end')[0]
+T_adia = fin_analytical('adiabatic')[0]
+
+def T_fin_mean(bc, L_fin_, lambd_, Ac_, k_, Bi_, T_ext_, T_0_):
+
+    if bc == "free_end":
+        T_to_integrate = T_free_end
+    elif bc == "adiabatic":
+        T_to_integrate = T_adia
+    else:
+        raise ValueError('Boundary condition not recognized')
+    
+    T_mean = sp.integrate(T_to_integrate.subs({L_fin: L_fin_, lambd: lambd_, Ac: Ac_, k: k_, Bi: Bi_, T_ext: T_ext_, T_0: T_0_}), (x, 0, L_fin)) / L_fin
+    
+    return float(T_mean.evalf())
