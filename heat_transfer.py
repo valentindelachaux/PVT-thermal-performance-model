@@ -152,7 +152,7 @@ def speed_natural_convection(T_abs,T_amb,theta,L):
 
     g = scc.g
     beta = 1/T_mean 
-    DT = T_abs - T_amb    
+    DT = np.abs(T_abs - T_amb)
     nu = air_nu(T_mean)
 
     speed = np.sqrt((g*beta*DT*L)/nu)
