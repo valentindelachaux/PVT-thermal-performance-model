@@ -7,6 +7,7 @@ import math
 from datetime import datetime
 from io import StringIO
 
+import copy
 import pickle
 
 import numpy as np
@@ -31,11 +32,17 @@ import time
 
 import model_ht as modht
 
+sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\RD-systems-and-test-benches')
+import utils.data_processing as dp
+
+import shutil
+
 # sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\parallel-flow-distribution-pressure-loss\ansys')
-sys.path.append(r'G:\Mon Drive\GitHub\PVT-thermal-performance-model')
+# sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\PVT-thermal-performance-model')
 
-sys.path.append(r'G:\Mon Drive\GitHub\PVT-PL-model\ansys')
+sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\PVT-PL-model\ansys')
 
+from CoolProp.CoolProp import PropsSI
 
 import jou_gen as jg
 import ansys_py_bridge as apb
@@ -49,6 +56,26 @@ import ht
 import general as gen
 
 ## Fonctions
+
+# Flatten the dictionary and convert to a DataFrame
+def flatten_dict(d, parent_key='', sep='_'):
+    items = []
+    for k, v in d.items():
+        new_key = f'{parent_key}{sep}{k}' if parent_key else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+def flatten_dict_in_df(d):
+    # Apply the flatten function to each key in the main dictionary
+    flattened_data = {k: flatten_dict(v) for k, v in d.items()}
+
+    # Convert to a DataFrame
+    df = pd.DataFrame.from_dict(flattened_data, orient='index')
+
+    return df
 
 def check_folder(fp):
     if not os.path.exists(fp):
@@ -75,6 +102,24 @@ def import_inputs(geometry_path, hypotheses_path, testConditions_path, Inputs_Py
     Inputs_PyFluent = read_Inputs_PyFluent(Inputs_PyFluent_path)
 
     return panelSpecs, hyp, steadyStateConditions_df, Inputs_PyFluent
+
+def save_BC(solver, folder_path_case) :
+
+    bc_types = ['pressure_inlet', 'pressure_outlet', 'wall']
+    bc_dict = {}
+
+    for bc_type in bc_types:
+        if len(getattr(solver.setup.boundary_conditions, bc_type).keys()) > 0:
+            for key in getattr(solver.setup.boundary_conditions, bc_type).keys():
+                bc_dict[bc_type] = {key : getattr(solver.setup.boundary_conditions, bc_type)[key].get_state(), **bc_dict.get(bc_type, {})}
+
+    bc = {'pressure-inlet' : flatten_dict_in_df(bc_dict['pressure_inlet']),
+        'pressure-outlet' : flatten_dict_in_df(bc_dict['pressure_outlet']),
+        'wall' : flatten_dict_in_df(bc_dict['wall']),
+        }
+
+    for key in bc.keys():
+        dp.write_df_in_sheet(bc[key], os.path.join(folder_path_case, 'boundary_conditions.xlsx'), sheet_name = str(key), with_index = True)
 
 def read_Inputs_PyFluent(Inputs_PyFluent_path):
     Inputs_PyFluent = pd.read_excel(Inputs_PyFluent_path)
@@ -105,6 +150,50 @@ def init_mesh(tui, Mesh_fp, S2S_fp, caoMeshName) :
 
     jg.change_mesh(tui, Mesh_fp, caoMeshName)
     read_or_create_radiation(tui, S2S_fp, caoMeshCode)
+
+def update_operating_conditions(tui, p_op, T_amb, boussinesq = True):
+    
+    tui.define.operating_conditions.operating_pressure(p_op)
+    tui.define.operating_conditions.operating_temperature(T_amb)
+
+    if boussinesq:
+        tui.define.operating_conditions.operating_density("no")
+
+    else:
+        tui.define.operating_conditions.operating_density("yes", PropsSI('D', 'T', 273.15, 'P', 101325, 'air'))
+
+def update_air_properties(solver, p_op, T_op):
+
+    air_dict = solver.setup.materials.fluid["air"].get_state()
+
+    air_dict['density']['option'] = 'boussinesq'
+    air_dict['density']['boussinesq'] = PropsSI('D', 'T', T_op, 'P', p_op, 'air')
+    air_dict['specific_heat']['option'] = 'constant'
+    air_dict['specific_heat']['constant'] = PropsSI('C', 'T', T_op, 'P', p_op, 'air')
+    air_dict['thermal_conductivity']['option'] = 'constant'
+    air_dict['thermal_conductivity']['constant'] = PropsSI('conductivity', 'T', T_op, 'P', p_op, 'air')
+    air_dict['therm_exp_coeff']['option'] = 'constant'
+    air_dict['therm_exp_coeff']['constant'] = PropsSI('ISOBARIC_EXPANSION_COEFFICIENT', 'T', T_op, 'P', p_op, 'air')
+    air_dict['viscosity']['option'] = 'constant'
+    air_dict['viscosity']['constant'] = PropsSI('viscosity', 'T', T_op, 'P', p_op, 'air')
+
+    solver.setup.materials.fluid["air"].set_state(air_dict)
+
+def change_air_to_incompressible_ideal_gas(solver):
+
+    air_dict = solver.setup.materials.fluid["air"].get_state()
+
+    air_dict['density']['option'] = 'incompressible-ideal-gas'
+
+    solver.setup.materials.fluid["air"].set_state(air_dict)
+
+# # Change conditions for new hx_flat.yd/yu.x surfaces
+def adapt_for_fins(tui):
+
+    field_index_list = [2,2,2,4,4,4]
+
+    for i, surface_name in enumerate(["hx_flat_yd_air.1", "hx_flat_yd_air.2", "hx_flat_yd_air.3", "hx_flat_yu_air.1", "hx_flat_yu_air.2", "hx_flat_yu_air.3"]):
+        jg.change_bc_wall(tui, surface_name, "conductive_temperature_field", "\"e_hx+220[kg m s^-3 K^-1]/hint_hx\"", f"\"T_field_{field_index_list[i]}\"")
 
 def init_solver(fp, server_code):
     """Initialize the tui and solver objectfs for PyFluent
@@ -139,16 +228,16 @@ def import_1Dresults_into_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0, me
     L_PV = Inputs_PyFluent.loc['L_PV','value'] # m
     w_PV = Inputs_PyFluent.loc['w_PV','value'] # m
 
-    volume_PV = L_PV * w_PV * e_PV
+    volume_PV_slice = L_PV * w_PV * e_PV
 
-    Inputs_PyFluent.loc['Heat_Generation_Rate', 'value'] = - df_one['Qdot_PV_sky'].values[0]/volume_PV
+    Inputs_PyFluent.loc['Heat_Generation_Rate', 'value'] = - df_one['Qdot_PV_sky'].values[0] / 4.75 / volume_PV_slice
 
     if method == 'bridge':
 
         for i in range(1, nb_hx + 1) :      
             Inputs_PyFluent.loc[f'T_fluid_in_{i}', 'value'] = res[f'part{i+1}']['df_one']['T_fluid_in'].loc[0]
-            Inputs_PyFluent.loc[f'a_f_{i}', 'value'] = res[f'part{i}']['slices_df']['a_f'].values[0]
-            Inputs_PyFluent.loc[f'b_f_{i}', 'value'] = res[f'part{i}']['slices_df']['b_f'].values[0]
+            Inputs_PyFluent.loc[f'a_f_{i}', 'value'] = res[f'part{i+1}']['slices_df']['a_f'].values[0]
+            Inputs_PyFluent.loc[f'b_f_{i}', 'value'] = res[f'part{i+1}']['slices_df']['b_f'].values[0]
 
         Inputs_PyFluent.loc['T_fluid_in_man', 'value'] = res['part1']['df_one']['T_fluid_mean'].loc[0]
         Inputs_PyFluent.loc['T_fluid_out_man', 'value'] = res['part7']['df_one']['T_fluid_mean'].loc[0]
@@ -251,7 +340,7 @@ def save_simu_1D(df_one, res, df_one_fp, res_fp, df_one_per_part_fp) :
         # result_1D_slices_df.index = [f'part{i}' for i in range(1, nb_hx+3)]
         # result_1D_slices_df
 
-def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, hyp, big_it) :
+def convert_CFD_results_into_phis(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, hyp, big_it) :
         
         nb_hx = int(Inputs_PyFluent.loc['nb_hx', 'value'])
 
@@ -267,7 +356,7 @@ def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_re
 
         Qdot.to_csv(os.path.join(folder_path_case,f'all_ht_report_{big_it}.csv'), sep=';')
 
-        if (hyp['fins'] == 1.) or (hyp['fins'] == "1"):
+        if (hyp['fins_CFD'] == 1.) or (hyp['fins_CFD'] == "1"):
 
             parts_tube_back = [
                 ['manifold_yu'],
@@ -336,13 +425,16 @@ def compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_re
         
         phi.to_csv(file_path_result_CFD, sep=';', index=True)
 
-def write_files(tui, folder_path_case, case, big_it) :
-        jg.write_data(tui, folder_path_case, f'cas{case}_it{big_it}')
+def save_residuals_data_casdat_from_CFD(tui, folder_path_case, case, big_it) :
+
         jg.write_residuals_file(tui, folder_path_case, f'residuals_cas{case}_it{big_it}')
-        jg.write_case(tui, folder_path_case, f'cas{case}_it{big_it}')
         jg.compute_mass_flow_rate(tui, 'face-inlet-under-panel', folder_path_case, f'mass_flow_rate_cas{case}_it{big_it}')
         jg.compute_temp_avg(tui, 'face-outlet-under-panel', folder_path_case, f'temp_outlet_cas{case}_it{big_it}')
         jg.compute_surface_temperatures(tui, 'pvt_slice_outdoor_Fluent_GMI_fins', os.path.join(folder_path_case, f'surface_temperatures_it{big_it}'))
+
+        tui.file.write_case_data(os.path.join(r"D:\ANSYS_save", f"casdat_cas{case}_it{big_it}.dat.h5"))
+        shutil.move(os.path.join(r"D:\ANSYS_save", f"casdat_cas{case}_it{big_it}.cas.h5"), os.path.join(folder_path_case, f"casdat_cas{case}_it{big_it}.cas.h5"))
+        shutil.move(os.path.join(r"D:\ANSYS_save", f"casdat_cas{case}_it{big_it}.dat.h5"), os.path.join(folder_path_case, f"casdat_cas{case}_it{big_it}.dat.h5"))
 
 def copy_inputs(Inputs, fp):
 
@@ -360,6 +452,8 @@ def read_or_create_radiation(tui, S2S_fp, caoMeshCode):
     else:
         jg.read_radiation(tui, S2S_fp, caoMeshCode)
 
+p_op = 101325
+
 def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 5, T_out_diff_convergence_control = 0.05, method = 'bridge'):
 
     caoMeshCode, testConditionsCode, panelSpecs, hyp, steadyStateConditions_dict, Inputs_PyFluent = Inputs
@@ -373,7 +467,13 @@ def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 
 
     for case in range(nb_case):
 
+        panelSpecs_case = copy.deepcopy(panelSpecs)
+        hyp_case = copy.deepcopy(hyp)
+        steadyStateConditions_dict_case = copy.deepcopy(steadyStateConditions_dict)
+        Inputs_PyFluent_case = copy.deepcopy(Inputs_PyFluent)
+
         folder_path_case = check_folder( os.path.join(SR_caoMesh_fp, f"{testConditionsCode}_{method}_try{i_try}_case{case}") )
+        jg.change_report_file_path(tui, "report-ht-hx-rfile", os.path.join(folder_path_case, f'report_case{case}'))
 
         if case == 0:
             copy_inputs(Inputs, Inputs_fp)
@@ -384,45 +484,55 @@ def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 
         with open(os.path.join(folder_path_case, f'{now}.txt'), 'w') as f:
             pass
 
-        stepConditions = steadyStateConditions_dict[case].copy()
+        stepConditions = steadyStateConditions_dict_case[case].copy()
 
-        if stepConditions['u'] >= 0.1:
-            bc_to_init = "cd2_wind"
-            c = stepConditions['u']
-        else:
-            bc_to_init = "cd_fc"
-            # c = bht.speed_natural_convection(stepConditions['T_fluid_in0'], stepConditions['T_amb'], math.radians(45), Inputs_PyFluent.loc['L_PV', 'value'])
-            c = 0.1
-
-        T_out_init = 0.
-
-        hyp_case = hyp.copy()
         big_it = hyp_case['big_it']
         T_amb = stepConditions['T_amb']
         T_fluid_in0 = stepConditions['T_fluid_in0']
         
         file_path_result_CFD, file_path_result_PyFluent, df_one_per_part_fp, df_one_fp, res_fp = create_save_paths(hyp_case, folder_path_case, big_it)
 
-        df_one, res = ty.simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp_case)
-        T_out = T_out_init
-        T_out_init = df_one['T_fluid_out'].loc[0]
+        df_one, res = ty.simu_one_steady_state_all_he(panelSpecs_case, stepConditions, hyp_case)
+        T_out_prev = 0.
+        T_out_now = df_one['T_fluid_out'].loc[0]
+
+        T_m = df_one['T_fluid_mean'].loc[0]
+
+        update_operating_conditions(tui, p_op, T_amb)
+        update_air_properties(solver, p_op, (T_amb + T_m)/2)
 
         hyp_case['method_h_top_g_exchanger'] = 'CFD'
         hyp_case['method_h_back_abs'] = 'CFD'
         hyp_case['method_h_back_tube'] = 'CFD'
         hyp_case['method_h_rad_back_tube'] = 'CFD'
 
-        import_1Dresults_into_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0, method)
+        import_1Dresults_into_Pyfluent(Inputs_PyFluent_case, df_one, res, T_fluid_in0, method)
+        import_Inputs_PyFluent_to_FluentCase(tui, Inputs_PyFluent_case, 'init')
+        Inputs_PyFluent_case.to_csv(file_path_result_PyFluent, sep=';')
 
-        import_Inputs_PyFluent_to_FluentCase(tui, Inputs_PyFluent, 'init')
-
-        cy = c/np.sqrt(2)
-        cz = - c/np.sqrt(2)
-
-        # L_abs = panelSpecs['main']['L_abs']
+        # L_abs = panelSpecs_case['main']['L_abs']
         # c = bht.speed_natural_convection(T_fluid_in0, T_amb, theta,L_abs)
 
-        jg.standard_initialization(tui, bc_to_init, 0, 0, cy, cz)
+        if stepConditions['u'] >= 0.1:
+            bc_to_init = "cd2_wind"
+            c = stepConditions['u']
+            cy =   c/np.sqrt(2)
+            cz = - c/np.sqrt(2)
+
+            cd2_wind = solver.setup.boundary_conditions.velocity_inlet['cd2_wind'].get_state()
+            cd2_wind['vmag']['constant'] = c
+            solver.setup.boundary_conditions.velocity_inlet['cd2_wind'].set_state(cd2_wind)
+            jg.standard_initialization(tui, bc_to_init, 0, 0, cy, cz)
+
+        else:
+            bc_to_init = "cd_fc"
+            # c = bht.speed_natural_convection(stepConditions['T_fluid_in0'], stepConditions['T_amb'], math.radians(45), Inputs_PyFluent_case.loc['L_PV', 'value'])
+            c = 0.1
+            cy = - c/np.sqrt(2)
+            cz =   c/np.sqrt(2)
+            jg.standard_initialization(tui, bc_to_init, 0, 0, 0, c)
+
+        save_BC(solver, folder_path_case)
 
         while big_it < nb_big_it :
 
@@ -433,22 +543,26 @@ def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 
 
             # CFD
             solver.solution.run_calculation.iterate(number_of_iterations=nb_it)
-            compute_result_CFD(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent, panelSpecs, hyp, big_it) # on remplit les phis
-            # copy for save Inputs_PyFluent
-            Inputs_PyFluent.to_csv(file_path_result_PyFluent, sep=';')
+            convert_CFD_results_into_phis(tui, folder_path_case, file_path_result_CFD, file_path_result_PyFluent, Inputs_PyFluent_case, panelSpecs_case, hyp_case, big_it) # on remplit les phis
 
-            write_files(tui, folder_path_case, case, big_it)
+            save_residuals_data_casdat_from_CFD(tui, folder_path_case, case, big_it)
 
             try:
 
                 # 1D
-                df_one, res = ty.simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp_case)
+                df_one, res = ty.simu_one_steady_state_all_he(panelSpecs_case, stepConditions, hyp_case)
 
-                # On alimente la CFD
-                import_1Dresults_into_Pyfluent(Inputs_PyFluent, df_one, res, T_fluid_in0, method)
- 
+                T_out_prev = T_out_now
+                T_out_now = df_one['T_fluid_out'].loc[0]
+
+                T_m = df_one['T_fluid_mean'].loc[0]
+                update_air_properties(solver, p_op, (T_amb + T_m)/2)
+
+                # On alimente la CFD 
                 if big_it < nb_big_it - 1:
-                    import_Inputs_PyFluent_to_FluentCase(tui, Inputs_PyFluent, 'update')
+                    import_1Dresults_into_Pyfluent(Inputs_PyFluent_case, df_one, res, T_fluid_in0, method)
+                    import_Inputs_PyFluent_to_FluentCase(tui, Inputs_PyFluent_case, 'update')
+                    Inputs_PyFluent_case.to_csv(file_path_result_PyFluent, sep=';')
 
                 big_it = big_it + 1
                 hyp_case['big_it'] = big_it
@@ -460,15 +574,13 @@ def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 
                 log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : f'1D model error at big it : {big_it}', 'errors': e}
                 break
 
-            if abs(T_out-T_out_init)< T_out_diff_convergence_control:
-                time_end = time.time()
-                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : f'temperature profile converged at big it : {big_it}', 'errors': 'None'}
-                save_simu_1D(df_one, res, df_one_fp, res_fp, df_one_per_part_fp)
+            time_end = time.time()
+            save_simu_1D(df_one, res, df_one_fp, res_fp, df_one_per_part_fp)
 
+            if ((big_it-1) >= 2) and (abs(T_out_now-T_out_prev) < T_out_diff_convergence_control): 
+                log_df.loc[big_it] = {'iteration': big_it-1, 'time': time_end - time_start, 'log' : f'temperature profile converged at big it : {big_it}', 'errors': 'None'}
                 break
-
             else:
-                time_end = time.time()
-                log_df.loc[big_it] = {'iteration': big_it, 'time': time_end - time_start, 'log' : 'continue' if big_it < nb_big_it else 'big it limit reached', 'errors': 'None'}
+                log_df.loc[big_it] = {'iteration': big_it-1, 'time': time_end - time_start, 'log' : 'continue' if big_it < nb_big_it else 'big it limit reached', 'errors': 'None'}
 
         log_df.to_csv(os.path.join(folder_path_case,f'log.csv'), sep=';')
