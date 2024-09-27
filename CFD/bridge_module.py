@@ -105,15 +105,19 @@ def import_inputs(geometry_path, hypotheses_path, testConditions_path, Inputs_Py
 
 def save_BC(solver, folder_path_case) :
 
-    bc_types = ['pressure_inlet', 'pressure_outlet', 'wall']
+    bc_types = ['velocity_inlet', 'pressure_inlet', 'pressure_outlet', 'wall']
     bc_dict = {}
 
     for bc_type in bc_types:
         if len(getattr(solver.setup.boundary_conditions, bc_type).keys()) > 0:
             for key in getattr(solver.setup.boundary_conditions, bc_type).keys():
                 bc_dict[bc_type] = {key : getattr(solver.setup.boundary_conditions, bc_type)[key].get_state(), **bc_dict.get(bc_type, {})}
+        else:
+            bc_dict[bc_type] = {}
 
-    bc = {'pressure-inlet' : flatten_dict_in_df(bc_dict['pressure_inlet']),
+    bc = {
+        'velocity-inlet' : flatten_dict_in_df(bc_dict['velocity_inlet']),
+        'pressure-inlet' : flatten_dict_in_df(bc_dict['pressure_inlet']),
         'pressure-outlet' : flatten_dict_in_df(bc_dict['pressure_outlet']),
         'wall' : flatten_dict_in_df(bc_dict['wall']),
         }

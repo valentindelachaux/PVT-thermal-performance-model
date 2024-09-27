@@ -2304,7 +2304,7 @@ def get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
                 if i == 3 or i == 5:
                     Qdot_top.append(4.75 * ht[ht['Component'].isin(parts_top[i - 1])]['ht'].sum())
                     Qdot_PV_sky.append(
-                        - 4.75*ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
+                        - 4.75*ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum() / 2
                     )
                 else:
                     Qdot_top.append(1e-6)
@@ -2379,7 +2379,7 @@ def get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
                     Qdot_tube_back_conv.append(4.75*conv_flat_tot)
 
                     Qdot_PV_sky.append(
-                        - 4.75*ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum()
+                        - 4.75*ht_tot[ht_tot['Component'] == 'User Energy Source']['ht'].sum() / 2
                     )
                 else:
                     Qdot_top.append(1e-6)
