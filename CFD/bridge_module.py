@@ -200,7 +200,7 @@ def adapt_for_fins(tui):
     for i, surface_name in enumerate(["hx_flat_yd_air.1", "hx_flat_yd_air.2", "hx_flat_yd_air.3", "hx_flat_yu_air.1", "hx_flat_yu_air.2", "hx_flat_yu_air.3"]):
         jg.change_bc_wall(tui, surface_name, "conductive_temperature_field", "\"e_hx+220[kg m s^-3 K^-1]/hint_hx\"", f"\"T_field_{field_index_list[i]}\"")
 
-def init_solver(fp, server_code):
+def init_solver(fp, server_code, subfolder = 'server'):
     """Initialize the tui and solver objectfs for PyFluent
     
     Args:
@@ -212,7 +212,11 @@ def init_solver(fp, server_code):
         solver (object): Solver object
     """
 
-    solver_path = os.path.join(fp, 'server', f'server_info-{server_code}.txt')
+    if subfolder == '':
+        solver_path = os.path.join(fp, f'server_info-{server_code}.txt')
+    else:
+        solver_path = os.path.join(fp, subfolder, f'server_info-{server_code}.txt')
+
     solver = pyfluent.connect_to_fluent(server_info_file_name=solver_path)
     tui = solver.tui
     return tui, solver
