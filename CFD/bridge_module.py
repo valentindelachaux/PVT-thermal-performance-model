@@ -2,6 +2,13 @@
 
 import os
 import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'PVT-thermal-performance-model')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'RD-systems-and-test-benches')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'parallel-flow-distribution-pressure-loss')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'parallel-flow-distribution-pressure-loss', 'ansys')))
+
 import time
 import math
 from datetime import datetime
@@ -32,15 +39,9 @@ import time
 
 import model_ht as modht
 
-sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\RD-systems-and-test-benches')
 import utils.data_processing as dp
 
 import shutil
-
-# sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\parallel-flow-distribution-pressure-loss\ansys')
-# sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\PVT-thermal-performance-model')
-
-sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\PVT-PL-model\ansys')
 
 from CoolProp.CoolProp import PropsSI
 
@@ -462,7 +463,7 @@ def simu_bridge_cases(tui, solver, folder_path, Inputs, nb_it = 50, nb_big_it = 
 
     caoMeshCode, testConditionsCode, panelSpecs, hyp, steadyStateConditions_dict, Inputs_PyFluent = Inputs
 
-    SR_caoMesh_fp = check_folder(folder_path + '\\SimulationResults\\' + caoMeshCode)
+    SR_caoMesh_fp = check_folder(os.path.join(folder_path, 'SimulationResults', caoMeshCode))
 
     nb_case = len(steadyStateConditions_dict)
     nb_hx = int(Inputs_PyFluent.loc['nb_hx','value'])

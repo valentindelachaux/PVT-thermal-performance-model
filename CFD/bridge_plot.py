@@ -1,6 +1,13 @@
 ## IMPORTS
 import os
 import sys
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'PVT-thermal-performance-model')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'RD-systems-and-test-benches')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'parallel-flow-distribution-pressure-loss')))
+sys.path.append(os.path.abspath(os.path.join(current_dir, '..', '..', 'parallel-flow-distribution-pressure-loss', 'ansys')))
+
 import re
 import time
 import math
@@ -31,22 +38,6 @@ import matplotlib.ticker as mtick
 from matplotlib.cm import get_cmap
 import time
 import pickle
-
-sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\parallel-flow-distribution-pressure-loss\ansys')
-sys.path.append(r'D:\seagu_OneDrive\Documents\GitHub\PVT-thermal-performance-model')
-# import jou_gen as jg
-# import ansys_py_bridge as apb
-# import ansys.fluent.core as pyfluent
-# import model as ty
-# import proc as pr
-# import plot_functions_here as pfun
-# import heat_transfer as bht
-# import fluids as fds
-# import ht
-# import general as gen
-
-## FUNCTIONS
-
 
 def extract_surface_integrals(surface_name, file_path):
     with open(file_path, 'r') as file:
