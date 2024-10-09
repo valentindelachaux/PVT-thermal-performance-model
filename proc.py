@@ -48,12 +48,6 @@ def linear_interpolation_df(u_list,df_res):
 def AG(par):
     par['AG'] = par['L_pan']*par['w_pan']
 
-def l_B(par):
-    par['l_B'] = par['l_c']
-
-def W(par):
-    par["W"] = par["L_abs"]/par["N_meander"]
-
 def tube(par):
     H_tube = par['H_tube']
     w_tube = par['w_tube']
@@ -70,12 +64,18 @@ def tube(par):
 
     par['delta'] = (par['W']-par['Dext_tube'])/2
 
+def l_B(par):
+    par['l_B'] = par['l_c']
+
 def L_af(par):
     par['L_af'] = (par['W'] - par['l_B'])/2 + 1E-10
 
+def W(par):
+    par["W"] = par["L_abs"]/par["N_meander"]
+
 def insulated(par):
     lambd_ins = par.get('lambd_abs_ins',par.get('lambd_ins',0))
-    print('lambd_ins', lambd_ins)
+    # print('lambd_ins', lambd_ins)
     if lambd_ins>0:
         par['insulated'] = 1
     else:
@@ -191,6 +191,38 @@ def view_factor_fins(componentSpecs):
     componentSpecs["view_factor_f1"] = bht.view_factor_perpendicular_rectangles(componentSpecs["D"], componentSpecs["L_f1"])
     componentSpecs["view_factor_f2"] = bht.view_factor_perpendicular_rectangles(componentSpecs["D"], componentSpecs["L_f2"])
 
+def update_panelSpecs_N_tubes(par):
+
+    for el in [par[key] for key,value in par['decomp'].items()]:
+        L = el['L_abs'] if el['geometry'] == 'meander' else el['w_abs']
+        N = el['N_meander'] if el['geometry'] == 'meander' else el['N_harp']
+
+        el['W'] = L/N
+
+def update_panelSpecs_after_modif(par):
+
+    for el in [par[key] for key,value in par['decomp'].items()]:
+        AG(el)
+
+        X_rad(el)
+
+        tube(el)
+        l_B(el)
+        L_af(el)
+        iota(el)
+
+        insulated(el)        
+        C_B(el)
+        R_g(el)
+        R_top(el)
+        R_inter(el)
+        R_abs_ins(el)
+        R_tube_ins(el)
+
+        view_factor_absorber(el)
+        view_factor_tube(el)
+        view_factor_fins(el)
+
 # Retourne le dictionnaire de paramètres correpondant au PVT
 def import_geometry(path):
 
@@ -243,24 +275,7 @@ def import_geometry(path):
         else:
             pass
     
-    for el in [par[key] for key,value in par_decomp.items()]:
-        AG(el)
-        tube(el)
-        l_B(el)
-        L_af(el)
-        insulated(el)
-
-        iota(el)
-        X_rad(el)
-        C_B(el)
-        R_g(el)
-        R_top(el)
-        R_inter(el)
-        R_abs_ins(el)
-        R_tube_ins(el)
-        view_factor_absorber(el)
-        view_factor_tube(el)
-        view_factor_fins(el)
+    update_panelSpecs_after_modif(par)
 
     par["AG"] = par["main"]["AG"]
 
@@ -444,7 +459,11 @@ def pre_proc(test):
     else:
         return []
 
-def adjust_steadyStateConditions(steadyStateConditions_df, hyp):
+def adjust_steadyStateConditions(steadyStateConditions_df, hyp, convert_celsius=False):
+
+    if convert_celsius == True:
+        convert_to_K(steadyStateConditions_df)
+
     steadyStateConditions_df['T_back'] = steadyStateConditions_df['T_amb']
     steadyStateConditions_df['T_back_rad'] = steadyStateConditions_df['T_amb']
     steadyStateConditions_df['u_back'] = hyp['u_back']

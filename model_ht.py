@@ -64,7 +64,7 @@ def h_fluid(componentSpecs,stepConditions,var,hyp):
         if componentSpecs["tube_geometry"] == "rectangular":
             Nu = ht.conv_internal.Nu_laminar_rectangular_Shan_London(min(componentSpecs["H_tube"],componentSpecs["w_tube"])/max(componentSpecs["H_tube"],componentSpecs["w_tube"]))
         else:
-            Nu = ht.conv_internal.Nu_conv_internal(Re,Pr,Method='Laminar - constant Q')
+            Nu = ht.conv_internal.Nu_conv_internal(Re, Pr, Method='Laminar - constant Q')
     else:
         Nu = ht.conv_internal.turbulent_Colburn(Re,Pr)
 
@@ -147,12 +147,12 @@ def h_top_g(componentSpecs,stepConditions,var,hyp):
             var["h_top_g"] = h_free
         elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent_with_coeff':
             h_forced = hyp["coeff_h_top_forced"]*h_forced_turbulent
-        elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent_with_coeff_steps':
+        elif hyp['method_h_top_g_exchanger'] == 'forced_with_coeff_steps':
             if (0. <= stepConditions['u'] < 1.):
                 var["h_top_g"] = hyp["coeff_h_top_forced_range0"]*h_forced
             elif (1. <= stepConditions['u'] < 2.):
                 var["h_top_g"] = hyp["coeff_h_top_forced_range1"]*h_forced
-            elif (2. <= stepConditions['u']):
+            else:
                 var["h_top_g"] = hyp["coeff_h_top_forced_range2"]*h_forced
         elif hyp['method_h_top_g_exchanger'] == 'forced_turbulent':
             var["h_top_g"] = h_forced_turbulent
@@ -286,14 +286,13 @@ def h_back_abs(componentSpecs,stepConditions,var,hyp):
             var["h_back"] = 0.5
         
         # Case with fins
-        elif componentSpecs["fin_0"] >= 1 or componentSpecs["fin_1"] >= 1 or componentSpecs["fin_2"] >= 1:
+        elif ((componentSpecs["fin_0"] >= 1) and (hyp["h_back_abs_influenced_by_fin0"] >= 1)) or componentSpecs["fin_1"] >= 1 or componentSpecs["fin_2"] >= 1:
 
             D = componentSpecs["D"]
 
-            if componentSpecs["N_ail"]<= 24:
+            if componentSpecs["D"] > hyp['D_threshold_h_back_conv']:
                 var["h_back"] = hyp["coeff_h_back"]*bht.back_h_simple(var["T_abs_mean"],stepConditions["T_back"],hyp["theta"],L_c)
             else:
-                print('here')
                 var["h_back"] = 1/(1/(hyp["coeff_h_back"]*bht.back_h_fins(var["T_abs_mean"],stepConditions["T_back"],hyp["theta"],L_c,D,componentSpecs["Heta"]))+0.01)
 
         # Cas without fins
@@ -400,13 +399,13 @@ def h_conv_fins(componentSpecs,stepConditions,var,hyp):
     Returns:
         None"""
 
-    if hyp["h_back_fins_calc"] == "tube":
+    if hyp["method_h_back_fins"] == "tube":
         var["h_conv_fins"] = var["h_back_tube"]
 
-    elif hyp["h_back_fins_calc"] == "abs":
+    elif hyp["method_h_back_fins"] == "abs":
         var["h_conv_fins"] = var["h_back"]
 
-    elif hyp["h_back_fins_calc"] == "TM":
+    elif hyp["method_h_back_fins"] == "TM":
         L_c = componentSpecs["L_fin"]
         D = componentSpecs["D"]
         h_free = hyp["coeff_h_back_fins_free"]*bht.back_h_fins(var["T_tube_mean"],stepConditions["T_back"],hyp["theta"],L_c,D,componentSpecs["Heta"])
@@ -414,7 +413,7 @@ def h_conv_fins(componentSpecs,stepConditions,var,hyp):
         h_forced = hyp["coeff_h_back_fins_forced"]*bht.ht_fins_forced_wiki(componentSpecs["L_fin"],componentSpecs["D"],stepConditions["u_back"])
         var["h_conv_fins"] = (h_free**3 + h_forced**3)**(1/3) + hyp["offset_h_back_fins"]
     else:
-        pass
+        raise ValueError("Method for h_conv_fins is not well defined")
 
 # RADIATIVE
 
@@ -487,7 +486,7 @@ def h_rad_back_tube(componentSpecs,stepConditions,var,hyp):
         eps = componentSpecs["eps_ins"]
     else: 
         T_ref = var["T_tube_mean"]
-        eps = componentSpecs["eps_hx_back"]
+        eps = componentSpecs["eps_tube"]
 
     h = eps*sigma*(T_ref+T_back_rad)*(T_ref**2+T_back_rad**2)
     var["h_rad_back_tube"] = componentSpecs["view_factor_tube"] * h
@@ -517,7 +516,7 @@ def h_rad_back(componentSpecs,stepConditions,var,hyp):
         eps = componentSpecs["eps_ins"]
     else: 
         T_ref = var["T_abs_mean"]
-        eps = componentSpecs["eps_hx_back"]
+        eps = componentSpecs["eps_abs"]
    
     T_back_rad_changed = hyp["T_back_rad_changed"]
 
@@ -545,9 +544,9 @@ def h_rad_fins(componentSpecs,stepConditions,var,hyp):
 
         Bi = bht.Biot(lambd,k,h,delta)
 
-        T_fin_mean = modfins.T_fin_mean('free_end', L_fin, lambd, A, k, Bi, stepConditions["T_back"], stepConditions["T_0"])
+        T_fin_mean = modfins.T_fin_mean('free_end', L_fin, lambd, A, k, Bi, stepConditions["T_back"], var['T_tube_mean'])
 
-        eps_fin = componentSpecs.get("eps_fin_0",0.9)
+        eps_fin = componentSpecs.get("eps_f0",componentSpecs.get("eps_fin",0.1))
         sigma = scc.sigma
         T_back = stepConditions["T_back"]
 
@@ -568,9 +567,9 @@ def h_rad_fins(componentSpecs,stepConditions,var,hyp):
 
         Bi = bht.Biot(lambd,k,h,delta)
         
-        T_fin_mean = modfins.T_fin_mean('adiabatic', L_fin, lambd, A, k, Bi, stepConditions["T_back"], stepConditions["T_0"])
+        T_fin_mean = modfins.T_fin_mean('adiabatic', L_fin, lambd, A, k, Bi, stepConditions["T_back"], var["T_tube_mean"])
 
-        eps_fin = componentSpecs.get("eps_fin_1",0.9)
+        eps_fin = componentSpecs.get("eps_f1",componentSpecs.get("eps_fin",0.1))
         sigma = scc.sigma
         T_back = stepConditions["T_back"]
 
@@ -591,9 +590,9 @@ def h_rad_fins(componentSpecs,stepConditions,var,hyp):
 
         Bi = bht.Biot(lambd,k,h,delta)
 
-        T_fin_mean = modfins.T_fin_mean('free_end', L_fin, lambd, A, k, Bi, stepConditions["T_back"], stepConditions["T_0"])
+        T_fin_mean = modfins.T_fin_mean('free_end', L_fin, lambd, A, k, Bi, stepConditions["T_back"], var["T_tube_mean"])
 
-        eps_fin = componentSpecs.get("eps_fin_2",0.9)
+        eps_fin = componentSpecs.get("eps_f2",componentSpecs.get("eps_fin",0.1))
         sigma = scc.sigma
         T_back = stepConditions["T_back"]
 

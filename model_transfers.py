@@ -218,25 +218,25 @@ def Qdot_absfin_back(componentSpecs,stepConditions,var):
 
 def Qdot_absfin_back_rad(componentSpecs,stepConditions,var):
 
-    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_rad_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
     L_af = componentSpecs["L_af"]
 
     T_absfin_m = var["T_absfin_mean"]
     T_back = stepConditions["T_back"]
     L = componentSpecs["L_tube"]
 
-    var["Qdot_absfin_back_rad"] = L*2*L_af*(T_absfin_m-T_back)/R_abs_back
+    var["Qdot_absfin_back_rad"] = (var["h_rad_back"] / (var["h_back"]+var["h_rad_back"])) * L*2*L_af*(T_absfin_m-T_back)/R_abs_back
 
 def Qdot_absfin_back_conv(componentSpecs,stepConditions,var):
     
-    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"])
+    R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"])
     L_af = componentSpecs["L_af"]
 
     T_absfin_m = var["T_absfin_mean"]
     T_back = stepConditions["T_back"]
     L = componentSpecs["L_tube"]
 
-    var["Qdot_absfin_back_conv"] = L*2*L_af*(T_absfin_m-T_back)/R_abs_back
+    var["Qdot_absfin_back_conv"] = (var["h_back"] / (var["h_back"]+var["h_rad_back"])) * L*2*L_af*(T_absfin_m-T_back)/R_abs_back
 
 def Qdot_absfin_tube(componentSpecs,stepConditions,var):
 
@@ -258,6 +258,36 @@ def Qdot_tube_back(componentSpecs,stepConditions,var):
     gamma = mod.calc_gamma(componentSpecs,var)
 
     var["Qdot_tube_back"] = L*gamma*(T_tube_m - T_back)
+
+def Qdot_f0(componentSpecs, stepConditions, var):
+    
+    L = componentSpecs["L_tube"]
+    if componentSpecs["fin_0"]==1:
+        gammaPrime_f0 = var["gammaPrime_f0"]
+    else:
+        gammaPrime_f0 = 0
+
+    T_tube_m = var["T_tube_mean"]
+    T_back = stepConditions["T_back"]
+
+    Q = L*gammaPrime_f0*(T_tube_m-T_back)
+
+    var["Qdot_f0"] = Q
+
+def Qdot_f1(componentSpecs, stepConditions, var):
+    
+    L = componentSpecs["L_tube"]
+    if componentSpecs["fin_1"]==1:
+        gammaPrime_f1 = var["gammaPrime_f1"]
+    else:
+        gammaPrime_f1 = 0
+
+    T_tube_m = var["T_tube_mean"]
+    T_back = stepConditions["T_back"]
+
+    Q = L*gammaPrime_f1*(T_tube_m-T_back)
+
+    var["Qdot_f1"] = Q
 
 def Qdot_f01(componentSpecs,stepConditions,var):
 
@@ -513,9 +543,9 @@ def qp_f2(componentSpecs,stepConditions,var):
     T_abs_m = var["T_abs_mean"]
     T_back = stepConditions["T_back"]
 
-    gamma_f2_int = var["gamma_f2_int"]
+    gamma_f2 = var["gamma_f2"]
 
-    var["qp_f2"] = gamma_f2_int*(T_abs_m-T_back)
+    var["qp_f2"] = gamma_f2*(T_abs_m-T_back)
 
 def Qdot_f2(componentSpecs,var):
 

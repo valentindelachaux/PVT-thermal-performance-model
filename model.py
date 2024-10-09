@@ -13,13 +13,15 @@ from CoolProp.CoolProp import PropsSI
 import model_transfers as mtr
 
 import sys
+sys.path.append("../RD-systems-and-test-benches")
 sys.path.append("../PVT-PL-model")
 import hx_hydraulic as hxhy
 
+import utils.data_processing as dp
 import model_fins as modfins
 
-mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_conv_fins","h_f0", "h_f1", "h_f2", "h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
-add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
+mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_conv_fins","h_f0", "h_f1", "h_f2", "h_rad_f0", "h_rad_f1", "h_rad_f2", "h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
+add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f0", "Qdot_f1", "Qdot_f2", "Qdot_f01"]
 
 # Iteration solving functions
 
@@ -216,7 +218,8 @@ def j(componentSpecs,var):
 
     if componentSpecs["fin_2"] == 1:
         gamma_f2 = var["gamma_f2"]
-        R_abs_back += 1/(gamma_f2)
+        # R_abs_back += 1/(gamma_f2)
+        R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"] + gamma_f2)
 
     j = 1/(Fprime*R_abs_back) + 1/(R_inter*Fprime) - 1/R_inter
 
@@ -999,6 +1002,11 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     Returns:
         None"""
 
+    if stepConditions["compt"] <= 2:
+        for i in range(3):
+            if componentSpecs[f"fin_{i}"] == 1:
+                var[f"h_f{i}"] = hyp['h_back_fins0']
+
     if componentSpecs["fin_0"] == 1:
         gammaPrime_f0(componentSpecs,var)
     else:
@@ -1090,14 +1098,7 @@ def one_loop(componentSpecs,stepConditions,var,hyp):
     mht.h_rad_back_tube(componentSpecs,stepConditions,var,hyp)
     mht.h_conv_fins(componentSpecs,stepConditions,var,hyp)
 
-    if stepConditions["compt"] == 0:
-
-        for i in range(3):
-            if componentSpecs[f"fin_{i}"] == 1:
-                var[f"h_f{i}"] = var["h_conv_fins"]
-
-    else:
-
+    if stepConditions["compt"] >= 2:
         mht.h_rad_fins(componentSpecs,stepConditions,var,hyp)
 
         for i in range(3):
@@ -1151,10 +1152,9 @@ def compute_power(componentSpecs,stepConditions,var):
     mtr.Qdot_ins_absfin_back_conv(componentSpecs,stepConditions,var)
     mtr.Qdot_ins_absfin_back_rad(componentSpecs,stepConditions,var)
 
-    if componentSpecs["fin_0"]==1 or componentSpecs["fin_1"]==1:
-        mtr.Qdot_f01(componentSpecs,stepConditions,var)
-    else:
-        var["Qdot_f01"] = 0.
+    mtr.Qdot_f0(componentSpecs,stepConditions,var)
+    mtr.Qdot_f1(componentSpecs,stepConditions,var)
+    mtr.Qdot_f01(componentSpecs,stepConditions,var)
 
     mtr.power_balance_1(componentSpecs,var)
     mtr.power_balance_3(componentSpecs,var)
@@ -1164,7 +1164,8 @@ def compute_power(componentSpecs,stepConditions,var):
     if componentSpecs["fin_1"] == 1:
         mtr.qp_f1(componentSpecs,stepConditions,var)
     if componentSpecs["fin_2"] == 1:
-        pass
+        mtr.qp_f2(componentSpecs,stepConditions,var)
+        mtr.Qdot_f2(componentSpecs,var)
 
     mtemp.T_B_check(componentSpecs,stepConditions,var)
 
@@ -1254,7 +1255,7 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
         stepConditions["compt"] = compt
         its_data = []
 
-        while compt <= 3 or abs(var["T_PV"] - var["T_PV0"]) >= 0.001:
+        while compt <= 5 or abs(var["T_PV"] - var["T_PV0"]) >= 0.001:
             compt += 1
             stepConditions["compt"] = compt
 
@@ -1315,7 +1316,7 @@ def simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp, method_anomaly
                 hyp['method_h_back_abs'] = 'free'
                 
             slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs[part],stepConditions,hyp)
-            res[part] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
+            res[part] = {'slices_df': copy.deepcopy(slices_df),'df_one': copy.deepcopy(df_one),'its_data_list':copy.deepcopy(its_data_list)}
 
             stepConditions["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
 
@@ -1324,7 +1325,10 @@ def simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp, method_anomaly
 
     df_one = pd.DataFrame()
 
-    for measure in res["main"]['df_one'].keys():
+    keys = dp.union_lists_same_order([list(res[part]['df_one'].keys()) for part in res.keys()])
+
+    # for measure in res["main"]['df_one'].keys():
+    for measure in keys:
         if measure in ['mdot','G','Gp','T_amb','T_sky','T_back','T_back_rad','u']:
             df_one[measure] = [stepConditions[measure]]
         elif measure == "T_fluid_in":
@@ -1335,31 +1339,34 @@ def simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp, method_anomaly
                 df_one[measure] = [res[last_past]['df_one']['T_fluid_out'].values[0]]
             else:
                 df_one[measure] = [res['main']['df_one']['T_fluid_out'].values[0]]
+
         elif measure in mean_list:
             av = 0
             Aire_tot = 0
             if decomp == 1:
-                for part in res.keys():
-                    if part == 'main':
-                        continue
-                    Aire = panelSpecs[part]["N_harp"]*panelSpecs[part]["W"]*panelSpecs[part]["L_tube"]
-                    Aire_tot += Aire
-                    av += res[part]['df_one'][measure].values[0]*Aire
-                df_one[measure] = [av/Aire_tot]
+                    for part in res.keys():
+                        if part == 'main':
+                            continue
+                        Aire = panelSpecs[part]["N_harp"]*panelSpecs[part]["W"]*panelSpecs[part]["L_tube"]
+                        Aire_tot += 0. if not (measure in res[part]['df_one'].columns) else Aire
+                        av += 0. if not (measure in res[part]['df_one'].columns) else res[part]['df_one'][measure].values[0]*Aire
+                    df_one[measure] = [math.nan] if Aire_tot == 0. else [av/Aire_tot]
             else:
-                df_one[measure] = [res['main']['df_one'][measure].values[0]]
+                df_one[measure] = math.nan if not (measure in res['main']['df_one'].columns) else [res['main']['df_one'][measure].values[0]]
         elif measure in add_list:
             sum = 0
+            flag = 0
             if decomp == 1:
                 for part in res.keys():
                     if part == 'main':
                         continue
-                    sum += res[part]['df_one'][measure].values[0]
-                df_one[measure] = [sum]
+                    sum += 0. if not (measure in res[part]['df_one'].columns) else res[part]['df_one'][measure].values[0]
+                    flag += 0. if not (measure in res[part]['df_one'].columns) else 1.
+                df_one[measure] = [math.nan] if flag < 1 else [sum]
             else:
-                df_one[measure] = [res['main']['df_one'][measure].values[0]]
+                df_one[measure] = math.nan if not (measure in res['main']['df_one'].columns) else [res['main']['df_one'][measure].values[0]]
     
-    return df_one,res
+    return df_one, res
 
 def simu_steadyStateConditions(panelSpecs,hyp,steadyStateConditions_df):
     
@@ -1382,6 +1389,7 @@ def simu_steadyStateConditions(panelSpecs,hyp,steadyStateConditions_df):
 
     df_res['T_m'] = (1/2) * (df_res['T_fluid_in'] + df_res['T_fluid_out'])
     df_res['T_m - T_amb'] = df_res['T_m'] - df_res['T_amb']
+    df_res['Qdot/AG'] = df_res['Qdot_tube_fluid'] / panelSpecs['AG']
 
     return df_res,list_res
 
@@ -1403,7 +1411,7 @@ def recap_energy_balances(df_one):
     balances['PV'] = df_one['Qdot_sun_PV'] + df_one['Qdot_glass_PV'] - df_one['Qdot_PV_sky'] - df_one['Qdot_PV_Base'] - df_one['Qdot_PV_absfin']
     balances['Base'] = df_one['Qdot_PV_Base'] + df_one['Qdot_absfin_Base'] - df_one['Qdot_Base_tube'] - df_one['Qdot_Base_back']
     balances['absfin'] = df_one['Qdot_PV_absfin'] - df_one['Qdot_absfin_Base'] - df_one['Qdot_absfin_back_conv'] - df_one['Qdot_absfin_back_rad'] 
-    balances['tube'] = df_one['Qdot_Base_tube'] - df_one['Qdot_tube_fluid'] - df_one['Qdot_tube_back_conv'] - df_one['Qdot_tube_back_rad'] - df_one['Qdot_tube_sky']
+    balances['tube'] = df_one['Qdot_Base_tube'] - df_one['Qdot_tube_fluid'] - df_one['Qdot_tube_back_conv'] - df_one['Qdot_tube_back_rad'] - df_one['Qdot_tube_sky'] - df_one['Qdot_f0'] - df_one['Qdot_f1']
 
     # list all the df_one columns in the 5 rows above in a list
     ht_labels = ['Qdot_sun_glass','Qdot_top_conv','Qdot_top_rad','Qdot_glass_PV','Qdot_sun_PV','Qdot_PV_sky','Qdot_PV_Base','Qdot_PV_absfin','Qdot_absfin_Base','Qdot_Base_tube','Qdot_Base_back','Qdot_tube_fluid','Qdot_tube_back_conv','Qdot_tube_back_rad','Qdot_tube_sky','Qdot_absfin_back_conv','Qdot_absfin_back_rad']
@@ -1414,7 +1422,7 @@ def recap_energy_balances(df_one):
 
     return balances, balances_perc_of_average
 
-def recap_residuals(panelSpecs, df_one, res):
+def recap_residuals(panelSpecs, df_one, res, disp=False):
 
     # Initialize a dictionary to store the residuals
     residuals = {'Part': [], 'glass': [], 'PV': [], 'Base': [], 'absfin': [], 'tube': []}
@@ -1435,9 +1443,24 @@ def recap_residuals(panelSpecs, df_one, res):
     # Create DataFrame
     df_residuals = pd.DataFrame(residuals)
 
-    pd.set_option('display.float_format', lambda x: f'{x:.2e}')
-    print(df_residuals)
-    pd.reset_option(pat='display.float_format')
+    if disp == True:
+        pd.set_option('display.float_format', lambda x: f'{x:.2e}')
+        print(df_residuals)
+        pd.reset_option(pat='display.float_format')
+
+    return df_residuals
+
+def recap_residuals_steadyStateConditions(panelSpecs, df_res, list_res):
+
+    df_res.reset_index(drop=True, inplace=True)
+
+    df_residuals = pd.DataFrame()
+
+    for i, res in enumerate(list_res):
+        df_one = df_res.loc[df_res.index == i].reset_index(drop=True)
+        bij = recap_residuals(panelSpecs, df_one, res)
+        bij = bij.loc[bij['Part'] == 'Total']
+        df_residuals = pd.concat([df_residuals, bij], ignore_index=True)
 
     return df_residuals
 
