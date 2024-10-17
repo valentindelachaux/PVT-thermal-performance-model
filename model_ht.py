@@ -399,13 +399,15 @@ def h_conv_fins(componentSpecs,stepConditions,var,hyp):
     Returns:
         None"""
 
-    if hyp["method_h_back_fins"] == "tube":
+    method_h_back_fins = hyp.get("method_h_back_fins","tube")
+
+    if method_h_back_fins == "tube":
         var["h_conv_fins"] = var["h_back_tube"]
 
-    elif hyp["method_h_back_fins"] == "abs":
+    elif method_h_back_fins == "abs":
         var["h_conv_fins"] = var["h_back"]
 
-    elif hyp["method_h_back_fins"] == "TM":
+    elif method_h_back_fins == "TM":
         L_c = componentSpecs["L_fin"]
         D = componentSpecs["D"]
         h_free = hyp["coeff_h_back_fins_free"]*bht.back_h_fins(var["T_tube_mean"],stepConditions["T_back"],hyp["theta"],L_c,D,componentSpecs["Heta"])

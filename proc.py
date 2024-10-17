@@ -52,15 +52,21 @@ def tube(par):
     H_tube = par['H_tube']
     w_tube = par['w_tube']
 
+    tube_thickness = par.get('e_tube',par.get('lambd_riser_back',0))
+
     if par['tube_geometry'] == 'circular':
         assert(H_tube == w_tube)
         par['D_tube'] = H_tube
         par['p_int_tube'] = 2*math.pi*(H_tube/2)
+
+        if par.get('update_tube_perimeter_for_convection',0) >= 1:
+            par['p_ext_tube'] = math.pi*(par['D_tube']+2*tube_thickness)
+            par['p_ext_tube_rad'] = par['p_ext_tube'] / 2
     else:
         par['D_tube'] = (2*H_tube*w_tube)/(H_tube+w_tube)
         par['p_int_tube'] = 2*(H_tube+w_tube)
 
-    par['Dext_tube'] = par['D_tube'] + par['lambd_riser_back']
+    par['Dext_tube'] = par['D_tube'] + 2*tube_thickness
 
     par['delta'] = (par['W']-par['Dext_tube'])/2
 

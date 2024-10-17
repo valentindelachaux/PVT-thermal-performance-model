@@ -276,7 +276,8 @@ def b(componentSpecs,stepConditions,var):
 
     if componentSpecs["fin_2"]==1:
         gamma_f2 = var["gamma_f2"]
-        R_abs_back += 1/(gamma_f2)
+        # R_abs_back += 1/(gamma_f2)
+        R_abs_back = componentSpecs["R_abs_ins"] + 1/(var["h_back"]+var["h_rad_back"] + gamma_f2)
 
     b = S_star + T_back/(R_abs_back*Fprime)
 
@@ -1155,17 +1156,10 @@ def compute_power(componentSpecs,stepConditions,var):
     mtr.Qdot_f0(componentSpecs,stepConditions,var)
     mtr.Qdot_f1(componentSpecs,stepConditions,var)
     mtr.Qdot_f01(componentSpecs,stepConditions,var)
+    mtr.Qdot_f2(componentSpecs,stepConditions,var)
 
     mtr.power_balance_1(componentSpecs,var)
     mtr.power_balance_3(componentSpecs,var)
-
-    if componentSpecs["fin_0"] == 1:
-        mtr.qp_f0(componentSpecs,stepConditions,var)
-    if componentSpecs["fin_1"] == 1:
-        mtr.qp_f1(componentSpecs,stepConditions,var)
-    if componentSpecs["fin_2"] == 1:
-        mtr.qp_f2(componentSpecs,stepConditions,var)
-        mtr.Qdot_f2(componentSpecs,var)
 
     mtemp.T_B_check(componentSpecs,stepConditions,var)
 
