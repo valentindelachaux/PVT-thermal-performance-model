@@ -1,3 +1,4 @@
+import os
 import math
 import copy
 import pandas as pd
@@ -68,8 +69,11 @@ def h_fluid(componentSpecs,stepConditions,var,hyp):
 
 def get_CFD_value(componentSpecs, stepConditions, var, hyp, h, phi, T_1, T_2):
     big_it = hyp['big_it']
-    CFD_ht = pd.read_csv(hyp['CFD_ht_path']+f'_{big_it}.csv',sep=';')
-    var[h] = abs( CFD_ht.loc[CFD_ht['component'] == componentSpecs['name']][phi].values[0] / (var[T_1] - stepConditions[T_2]) )
+    CFD_ht = pd.read_csv(os.path.join(hyp['CFD_ht_path'],f'phis_{big_it}.csv'), encoding='utf-8', sep=';', index_col=0)
+    if abs(var[T_1] - stepConditions[T_2]) < 0.1 :
+        var[h] = 0.1
+    else :
+        var[h] = abs( CFD_ht.loc[componentSpecs['name'], phi] / (var[T_1] - stepConditions[T_2]) )
 
 # EXTERNAL CONVECTIVE
 
@@ -419,8 +423,10 @@ def h_rad_g(componentSpecs,stepConditions,var,hyp):
     
     Returns:
         None"""
-    
-    var["h_rad_g"] = bht.h_rad(componentSpecs["eps_g"],var["T_glass"],stepConditions["T_sky"])
+    if hyp['method_h_top_g_exchanger'] == 'CFD':
+        var["h_rad_g"]=1e-10
+    else :
+        var["h_rad_g"] = bht.h_rad(componentSpecs["eps_g"],var["T_glass"],stepConditions["T_sky"])
 
 # Radiatif entre le PV et le ciel
 def h_rad(componentSpecs,stepConditions,var,hyp):

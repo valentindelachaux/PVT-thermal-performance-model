@@ -12,7 +12,7 @@ from CoolProp.CoolProp import PropsSI
 
 import model_transfers as mtr
 
-mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
+mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_back_fins","h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S","a_f","b_f"]
 add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f01"]
 
 # Iteration solving functions
@@ -1295,7 +1295,11 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
         stepConditions["compt"] = compt
         its_data = []
 
-        while compt <= 3 or abs(var["T_PV"] - var["T_PV0"]) >= 0.00001:
+        while compt <= 3 or abs(var["T_PV"] - var["T_PV0"]) >= 0.01:
+
+            if compt > 1000:
+                raise ValueError("Convergence not reached")
+
             compt += 1
             stepConditions["compt"] = compt
 
@@ -1333,13 +1337,13 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
 def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly = 0):
     
     res = {}
-
+    stepConditions_copy = stepConditions.copy()
     save_T_fluid_in0 = stepConditions["T_fluid_in0"]
 
     # Test the main part
 
     panelSpecs['main']['name'] = 'part1'
-    slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs['main'],stepConditions,hyp)
+    slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs['main'],stepConditions_copy,hyp)
     res['main'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
     hyp['h_back_prev'] = df_one['h_back'].values[0] # h_back de l'absorbeur
@@ -1355,10 +1359,10 @@ def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly =
             if method_anomaly== 1 and (panelSpecs[part]['is_anomaly'] == 1 or panelSpecs[part]['is_inlet_man'] == 1 or panelSpecs[part]['is_outlet_man'] == 1):
                 hyp['method_h_back_abs'] = 'free'
                 
-            slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs[part],stepConditions,hyp)
+            slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs[part],stepConditions_copy,hyp)
             res[part] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
-            stepConditions["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
+            stepConditions_copy["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
 
     else:
         decomp = 0
@@ -1367,7 +1371,7 @@ def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly =
 
     for measure in res["main"]['df_one'].keys():
         if measure in ['mdot','G','Gp','T_amb','T_sky','T_back','T_back_rad','u']:
-            df_one[measure] = [stepConditions[measure]]
+            df_one[measure] = [stepConditions_copy[measure]]
         elif measure == "T_fluid_in":
             df_one[measure] = [save_T_fluid_in0]
         elif measure == "T_fluid_out":
@@ -1399,8 +1403,8 @@ def simu_one_steady_state_all_he(panelSpecs,stepConditions,hyp, method_anomaly =
                 df_one[measure] = [sum]
             else:
                 df_one[measure] = [res['main']['df_one'][measure].values[0]]
-    
-    return df_one,res
+
+    return df_one, res
 
 def simu_steadyStateConditions(panelSpecs,hyp,steadyStateConditions_df):
     
