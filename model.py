@@ -20,7 +20,7 @@ import hx_hydraulic as hxhy
 import utils.data_processing as dp
 import model_fins as modfins
 
-mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_conv_fins","h_f0", "h_f1", "h_f2", "h_rad_f0", "h_rad_f1", "h_rad_f2", "h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S"]
+mean_list = ["T_glass","T_PV","T_PV_Base_mean","T_PV_absfin_mean","T_abs_mean","T_Base_mean","T_absfin_mean","T_ins_mean","T_ins_tube_mean","T_ins_absfin_mean","T_tube_mean","T_fluid_mean","h_top_g","h_rad","h_back","h_rad_back","h_back_tube","h_rad_back_tube","h_conv_fins","h_f0", "h_f1", "h_f2", "h_rad_f0", "h_rad_f1", "h_rad_f2", "h_rad_tube_abs","h_fluid","X_celltemp","eta_PV","S","a_f","b_f"]
 add_list = ["Qdot_sun_glass","Qdot_sun_PV","Qdot_top_conv","Qdot_top_rad","Qdot_glass_PV","Qdot_PV_sky","Qdot_PV_plate","Qdot_PV_Base","Qdot_PV_absfin","Qdot_absfin_Base","Qdot_absfin_back","Qdot_absfin_back_conv","Qdot_absfin_back_rad","Qdot_Base_tube","Qdot_Base_back","Qdot_tube_sky","Qdot_tube_fluid","Qdot_tube_back","Qdot_ins_tube_back_conv","Qdot_ins_tube_back_rad","Qdot_ins_absfin_back_conv","Qdot_ins_absfin_back_rad","Qdot_tube_back_conv","Qdot_tube_back_rad","Qdot_absfin_back","Qdot_f0", "Qdot_f1", "Qdot_f2", "Qdot_f01"]
 
 # Iteration solving functions
@@ -1287,13 +1287,13 @@ def simu_one_steady_state(componentSpecs, stepConditions, hyp):
 def simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp, method_anomaly = 0):
     
     res = {}
-
+    stepConditions_copy = stepConditions.copy()
     save_T_fluid_in0 = stepConditions["T_fluid_in0"]
 
     # Test the main part
 
     panelSpecs['main']['name'] = 'part1'
-    slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs['main'],stepConditions,hyp)
+    slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs['main'],stepConditions_copy,hyp)
     res['main'] = {'slices_df':slices_df.copy(),'df_one':df_one.copy(),'its_data_list':its_data_list.copy()}
 
     hyp['h_back_prev'] = df_one['h_back'].values[0] # h_back de l'absorbeur
@@ -1312,7 +1312,7 @@ def simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp, method_anomaly
             slices_df, df_one, its_data_list = simu_one_steady_state(panelSpecs[part],stepConditions,hyp)
             res[part] = {'slices_df': copy.deepcopy(slices_df),'df_one': copy.deepcopy(df_one),'its_data_list':copy.deepcopy(its_data_list)}
 
-            stepConditions["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
+            stepConditions_copy["T_fluid_in0"] = df_one["T_fluid_out"].values[0]
 
     else:
         decomp = 0
@@ -1324,7 +1324,7 @@ def simu_one_steady_state_all_he(panelSpecs, stepConditions, hyp, method_anomaly
     # for measure in res["main"]['df_one'].keys():
     for measure in keys:
         if measure in ['mdot','G','Gp','T_amb','T_sky','T_back','T_back_rad','u']:
-            df_one[measure] = [stepConditions[measure]]
+            df_one[measure] = [stepConditions_copy[measure]]
         elif measure == "T_fluid_in":
             df_one[measure] = [save_T_fluid_in0]
         elif measure == "T_fluid_out":

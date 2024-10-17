@@ -419,7 +419,11 @@ def write_stepConditions_from_steadyStateConditions(steadyStateConditions_df,i,h
 
     stepConditions["mdot"] = steadyStateConditions_df["mdot"][i]
 
-    stepConditions["guess_T_PV"] = (stepConditions["T_amb"]+stepConditions["T_fluid_in0"])/2
+    if hyp['specific_init'] == 0 :
+        stepConditions["guess_T_PV"] = (stepConditions["T_amb"]+stepConditions["T_fluid_in0"])/2
+    else:
+        stepConditions["guess_T_PV"] = hyp['specific_init']
+
 
     return stepConditions
 
