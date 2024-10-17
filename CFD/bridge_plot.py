@@ -2216,7 +2216,7 @@ def get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
     CFD_ht_list = []
 
 
-    for iteration in range(nb_it+1) :
+    for iteration in range(int(nb_it)+1) :
         file_path_phis = os.path.join(folder_path_case, f'phis_{iteration}.csv') 
         file_path_df_one = os.path.join(folder_path_case, f'df_one_per_part_{iteration}.csv')
         file_path_all_ht = os.path.join(folder_path_case, f'all_ht_report_{iteration}.csv')
@@ -2939,25 +2939,31 @@ def plot_1D_DeltaT_v2(Qdot, SR_fp, caoMeshCode, testConditionsCode, method, no_t
     fig = go.Figure()
 
     for no_case in cases:
-        panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
 
-        i = -1
-        while -i <= len(log) and log['errors'].iloc[i] == 'nan':
-            i -= 1
+        if os.path.exists(os.path.join(SR_fp, caoMeshCode, f'{testConditionsCode}_{method}_try{no_try}_case{no_case}', 'log.csv')):
 
-        if i < len(log):
-            nb_it = log['iteration'].iloc[i]
-        else:
-            return 'No iteration found'
+            panelSpecs, hyp, stepCondition, log, CFD_ht_list, phis_list, df_one_per_part_list = get_data_v2(SR_fp, caoMeshCode, testConditionsCode, method, no_try, no_case)
 
-        tube_value = df_one_per_part_list[nb_it][Qdot].sum()
-        T_in = stepCondition['T_fluid_in0']
-        T_out = df_one_per_part_list[nb_it]['T_fluid_out']['part7']
-        Tmean = (T_in + T_out) / 2
-        delta_temp = Tmean - stepCondition['T_amb']
+            i = -1
+            while -i <= len(log) and log['errors'].iloc[i] == 'nan':
+                i -= 1
 
-        tube_x.append(delta_temp)
-        tube_y.append(tube_value)
+            if i < len(log):
+                nb_it = log['iteration'].iloc[i]
+            else:
+                return 'No iteration found'
+
+            tube_value = df_one_per_part_list[nb_it][Qdot].sum()
+            T_in = stepCondition['T_fluid_in0']
+            T_out = df_one_per_part_list[nb_it]['T_fluid_out']['part7']
+            Tmean = (T_in + T_out) / 2
+            delta_temp = Tmean - stepCondition['T_amb']
+
+            tube_x.append(delta_temp)
+            tube_y.append(tube_value)
+
+        else: 
+            pass
 
     tube_x = np.array(tube_x).reshape(-1, 1)
     tube_y = np.array(tube_y)
